@@ -1,0 +1,57 @@
+{
+ "tau_s": 0.2684,
+ "tau_se_s": 0.0085,
+ "desplacament_global_m": [
+  0.025,
+  -0.018
+ ],
+ "per_sentit": {
+  "ENE": {
+   "n": 50,
+   "tau_s": 0.2768823825542114,
+   "se_s": 0.007000517819386847
+  },
+  "WSW": {
+   "n": 51,
+   "tau_s": 0.26664232715619723,
+   "se_s": 0.013936306334239715
+  }
+ },
+ "n_fotos": 118,
+ "n_vol_recte_v_gt_3": 103,
+ "residu_horitzontal_m": {
+  "abans": {
+   "mediana": 1.378,
+   "rms": 1.384,
+   "max": 2.409
+  },
+  "despres": {
+   "mediana": 0.492,
+   "rms": 0.603,
+   "max": 2.348
+  },
+  "despres_nomes_vol_recte": {
+   "mediana": 0.459,
+   "rms": 0.56,
+   "max": 1.171
+  }
+ },
+ "residu_vertical_std_m": 0.123,
+ "fotos_outlier": [
+  {
+   "foto": "DSC00082.JPG",
+   "v": 1.4,
+   "residu_despres_m": 2.35
+  },
+  {
+   "foto": "DSC00187.JPG",
+   "v": 3.7,
+   "residu_despres_m": 1.17
+  },
+  {
+   "foto": "DSC00094.JPG",
+   "v": 5.0,
+   "residu_despres_m": 1.09
+  }
+ ]
+}

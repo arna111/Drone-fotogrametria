@@ -1,0 +1,540 @@
+\chapter{Proves de vol i posada a punt}
+\label{chap:proves-vol}
+
+Aquest capítol recull la campanya de proves de vol i posada a punt feta entre agost i octubre de 2026, abans de l'operació en \emph{surveys} (\cref{chap:vols-prova}). Registra les incidències trobades en el control de vol, el GPS RTK, el mòdul de càmera i el grup propulsor, les causes identificades i els canvis aplicats per resoldre-les.
+
+\begin{table}[H]
+    \centering
+    \caption{Sessions de vol de la campanya}
+    \label{tab:sessions-vol}
+    \small
+    \begin{tabular}{llP{8.3cm}}
+        \toprule
+        Data & Sessió & Resultat \\
+        \midrule
+        6 d'agost & Posada a punt del control & Oscil·lació severa; \emph{crash} \\
+        8 d'agost & Posada a punt del control & Dos vols correctes; \emph{crash} en canviar l'orientació \\
+        10 d'agost & Prova GPS & Fallada d'un motor en vol; \emph{crash}; error de \emph{moving baseline} \\
+        27 d'agost & Quatre vols & Quatre vols nets, RTK Fixed al 100~\% \\
+        4 de setembre & Missió de \emph{grid} & Tallada pel \emph{geofence}; col·lapse de bateria \\
+        8 d'octubre & Vol de prova 5 & 118 fotos; ortomosaic i DSM (\cref{sec:vol5}) \\
+        13 d'octubre & Vol de prova 6 & Dos vols a l'alba; un lot aprofitable (\cref{sec:vol6}) \\
+        20 d'octubre & Hèlixs de 8 polzades & Dos armats avortats (\cref{subsec:propulsor-8in}) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Configuració inicial del controlador}
+\label{sec:config-inicial}
+
+La primera revisió del fitxer de paràmetres del controlador va detectar i corregir els problemes següents:
+
+\begin{itemize}
+    \item \texttt{FRAME\_CLASS} sense assignar (ara Quad, X).
+    \item \emph{Offsets} de posició dels GPS (\texttt{GPS1\_POS\_*} / \texttt{GPS2\_POS\_*}) a zero; mesurats respecte al centre de gravetat (\cref{tab:params-gps-mb}).
+    \item \texttt{EK3\_SRC1\_YAW} apuntant a la brúixola: passat a GPS \emph{yaw}.
+    \item Brúixola activada sense sensor connectat: desactivada.
+    \item \texttt{BATT\_MONITOR} a 0: passat a tensió i corrent analògics.
+    \item \texttt{MOT\_PWM\_TYPE} a PWM: passat a DShot300.
+    \item Tots els modes de vol a Stabilize: assignats Stabilize, AltHold, Loiter, Auto, Guided i RTL.
+    \item \texttt{SERVO9} assignat a \emph{Scripting1} sense ús real: desactivat.
+\end{itemize}
+
+\section{Cronologia d'incidents}
+\label{sec:cronologia-incidents}
+
+\subsection{6 d'agost -- Oscil·lació severa i \emph{crash}}
+
+\emph{Wobbling} als braços en pujar gas, amb deriva lateral repetible. Al \emph{log}, el llaç de \emph{rate} canviava de signe al 65~\% de les mostres, amb errors de fins a $301^{\circ}$/s. Va acabar amb \texttt{Crash: Disarming: AngErr=51>30}.
+
+Causes identificades:
+\begin{itemize}
+    \item Dron molt sobrepotenciat (\texttt{MOT\_THST\_HOVER=0{,}20}, \emph{hover} al 20~\%) amb PID de defecte pensats per a un \emph{hover} del 35--50~\%.
+    \item Motors saturant al mínim per un \texttt{MOT\_SPIN\_MIN} massa alt.
+    \item \texttt{MOT\_THST\_EXPO=0{,}8}.
+    \item Sense filtre \emph{notch}, amb vibracions de 44~m/s\textsuperscript{2} i 42 \emph{clips}.
+    \item Un \texttt{SAVE\_TRIM} fet en vol havia contaminat \texttt{AHRS\_TRIM\_X}.
+\end{itemize}
+
+\subsection{8 d'agost -- \emph{Crash} per canvi d'orientació}
+
+Els dos primers vols del dia van anar bé (oscil·lació baixada del 65~\% al 3--6~\%, zero \emph{clips}). Al tercer, en posar \texttt{AHRS\_ORIENTATION} de 4 a 0, el dron va bolcar en 0,4~s amb el controlador saturat en sentit contrari al gir: realimentació positiva pura.
+
+El problema real no era l'orientació sinó la polaritat del canal 2: el \emph{roll} responia correctament, només el \emph{pitch} estava invertit. Es va resoldre invertint l'\emph{elevator} al Radiomaster.
+
+\subsection{10 d'agost -- \emph{Crash} per fallada de motor}
+
+\emph{Hover} estable durant 10~s, després pèrdua sobtada. El motor M3 va quedar comandat a 2000 sense efecte; el corrent va baixar de 16~A a 8,9~A, el voltatge es va recuperar i les vibracions van caure just abans de la sortida: signatura inequívoca de motor aturat en vol.
+
+El mateix dia es va identificar que \texttt{GPS\_DRV\_OPTIONS=1} impedia el \emph{moving baseline}: aquest valor assumeix un cable directe entre els UART2 dels dos F9P, que no existeix en aquest muntatge. El \emph{rover} no arribava mai a RTK Fixed, d'aquí el \texttt{PreArm: GPS[2] yaw not available} (\cref{subsec:gps-moving-baseline}).
+
+\subsection{27 d'agost -- Quatre vols nets}
+
+Primera sessió sense incidents. GPS[0] i GPS[1] al 100~\% de RTK Fixed, GPS \emph{yaw} disponible en totes les mostres, vibracions d'11--16~m/s\textsuperscript{2} i zero \emph{clips} als quatre vols.
+
+\subsection{4 de setembre -- Missió tallada i \emph{crash} per bateria}
+
+\textbf{Vol 1:} la missió es va avortar al \emph{waypoint} 25 de 87 per \emph{breach} del \emph{geofence}. El radi inicial de 300~m era insuficient per al camp nou (\emph{waypoint} més llunyà a 566~m; 41 dels 87 fora del radi). Les fotos van sortir borroses.
+
+\textbf{Vol 2:} col·lapse de bateria. De 22,4~V a 8~V en 25~segons amb només 5~A de càrrega. El comptador marcava 213~mAh consumits d'un \emph{pack} de 4000, impossible: el sensor de corrent estava mal calibrat. El \emph{sag} va passar de 0,63~V a 1,79~V en 18~segons: resistència interna triplicada, una cel·la morint. Els \emph{failsafes} van actuar correctament (RTL a 758~s, Land a 763~s), però no hi havia energia per aterrar.
+
+\subsection{4--13 de setembre -- Problemes de càmera}
+\label{subsec:problemes-camera}
+
+Al vol 1: 121 ordres de dispar, només 33 exposicions confirmades, totes amb un retard constant d'1,16~s. Al vol 2: 50 ordres, zero fotos.
+
+Un primer diagnòstic va atribuir la lectura \texttt{FNumber=0}, \texttt{FocalLength=0} i \texttt{LensModel="----"} de l'EXIF a una fallada de contactes elèctrics. En realitat és el comportament normal d'un TTArtisan 25~mm f/2 manual, que no té contactes electrònics.
+
+Causes reals:
+\begin{itemize}
+    \item El MAP2 estava en mode AF-T (\texttt{CAM1\_SERVO\_ON=1300}), que fa un pre-enfocament d'1~s inútil amb objectiu manual: d'aquí el retard constant.
+    \item \texttt{CAM1\_SERVO\_OFF=1100} fora del rang de repòs que espera el MAP2 (1400--1600).
+    \item \texttt{CAM1\_DURATION=0.1} massa curt perquè el MAP2 llegeixi el comandament (el mode IS-T vol 1,0~s).
+    \item \emph{Release w/o Lens} possiblement desactivat, cosa que bloqueja el disparador amb un objectiu sense contactes.
+    \item Obturació lenta i autofocus actiu al vol 1 (causa de les fotos borroses).
+    \item La configuració del \emph{grid} assumia 20~mm quan l'objectiu real és de 25~mm: tot el solapament calculat era erroni.
+\end{itemize}
+
+Un cop aplicats els canvis, el vol 2 de la prova 6 va donar 110 ordres de dispar, 110 confirmacions de \emph{feedback} i 110 fotografies (\cref{sec:vol6}).
+
+\section{Canvis de paràmetres aplicats}
+\label{sec:canvis-aplicats}
+
+\subsection{Control (6 d'agost)}
+
+\begin{table}[H]
+    \centering
+    \caption{Ajust del control després de l'oscil·lació del 6 d'agost}
+    \label{tab:canvis-control}
+    \begin{tabular}{lll}
+        \toprule
+        Paràmetre & De & A \\
+        \midrule
+        \texttt{ATC\_RAT\_RLL\_P} / \texttt{PIT\_P} & 0,135 & 0,070 \\
+        \texttt{ATC\_RAT\_RLL\_I} / \texttt{PIT\_I} & 0,135 & 0,070 \\
+        \texttt{ATC\_RAT\_RLL\_D} / \texttt{PIT\_D} & 0,0036 & 0,0020 \\
+        \texttt{ATC\_RAT\_YAW\_P} & 0,18 & 0,100 \\
+        \texttt{MOT\_THST\_EXPO} & 0,8 & 0,65 \\
+        \texttt{MOT\_SPIN\_ARM} & 0,10 & 0,04 \\
+        \texttt{MOT\_SPIN\_MIN} & 0,15 & 0,06 \\
+        \texttt{ATC\_RAT\_*\_FLTD} / \texttt{FLTT} & 20 & 10 \\
+        \texttt{AHRS\_TRIM\_X} / \texttt{Y} & contaminats & recalibrats ($\approx 0$) \\
+        \texttt{LOG\_BITMASK} & 180222 & 196607 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{GPS}
+
+\begin{table}[H]
+    \centering
+    \caption{Canvis de configuració GPS arran de la incidència del 10 d'agost}
+    \label{tab:canvis-gps}
+    \begin{tabular}{lll}
+        \toprule
+        Paràmetre & De & A \\
+        \midrule
+        \texttt{GPS\_DRV\_OPTIONS} & 1 & 0 \\
+        \texttt{GPS1\_POS\_Y} / \texttt{GPS2\_POS\_Y} & 0 & $-0{,}19$ / $+0{,}19$ \\
+        \texttt{GPS1\_POS\_Z} / \texttt{GPS2\_POS\_Z} & 0 & $-0{,}10$ / $-0{,}10$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Seguretat i bateria}
+
+\begin{table}[H]
+    \centering
+    \caption{Canvis de seguretat (\emph{failsafes}, \emph{geofence}) i de bateria arran del 4 de setembre}
+    \label{tab:canvis-seguretat}
+    \begin{tabular}{lll}
+        \toprule
+        Paràmetre & De & A \\
+        \midrule
+        \texttt{BATT\_FS\_LOW\_ACT} & 0 & 2 (RTL) \\
+        \texttt{BATT\_FS\_CRT\_ACT} & 0 & 1 (Land) \\
+        \texttt{BATT\_LOW\_VOLT} / \texttt{CRT\_VOLT} & -- & 21,6 / 20,4 \\
+        \texttt{BATT\_AMP\_PERVLT} & sense calibrar & 87,73 \\
+        \texttt{BATT\_VOLT\_MULT} & sense calibrar & 10,82 \\
+        \texttt{FENCE\_ENABLE} & 0 & 1 \\
+        \texttt{FENCE\_RADIUS} & 300 & 700 \\
+        \texttt{WPNAV\_SPEED} & 1000 & 500 \\
+        \texttt{SR1\_*} (telemetria RFD) & 0 & actius \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Càmera}
+\label{subsec:canvis-camera-pendents}
+
+\begin{table}[H]
+    \centering
+    \caption{Canvis de càmera derivats del diagnòstic de \cref{subsec:problemes-camera}}
+    \label{tab:canvis-camera}
+    \begin{tabular}{lll}
+        \toprule
+        Paràmetre & Abans & Ara \\
+        \midrule
+        \texttt{CAM1\_SERVO\_ON} & 1300 (AF-T) & 1700 (IS-T) \\
+        \texttt{CAM1\_SERVO\_OFF} & 1100 & 1500 \\
+        \texttt{CAM1\_DURATION} & 0.1 & 1.0 \\
+        \texttt{SERVO5\_TRIM} & 1100 & 1500 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+L'ajust físic de la càmera és a \cref{tab:ajust-camera}. El \emph{grid} de Mission Planner es planifica amb la focal real de 25~mm.
+
+\section{Progressió mesurada}
+\label{sec:progressio-mesurada}
+
+\begin{table}[H]
+    \centering
+    \caption{Progressió de les mètriques de vol al llarg de la campanya}
+    \label{tab:progressio}
+    \begin{tabular}{lcccccc}
+        \toprule
+        Mètrica & 6 ago & 8 ago & 27 ago & 4 set & 8 oct & 13 oct \\
+        \midrule
+        Canvis de signe \emph{roll rate} & 65~\% & 3--6~\% & 8--9~\% & estable & -- & -- \\
+        VibeZ màx.\ (m/s\textsuperscript{2}) & 44 & 40 & 11--16 & 14--18 & 10,8 & 14,1--15,7 \\
+        \emph{Clips} & 42 & 0--29 & 0 & 0 & 0 & 0 \\
+        GPS[0] RTK Fixed & -- & -- & 100~\% & 100~\% & 100~\% & -- \\
+        GPS[1] RTK Fixed & -- & 0~\% & 100~\% & 100~\% & 100~\% & -- \\
+        \emph{Hover throttle} & 20~\% & 20~\% & 45~\% & 45~\% & -- & -- \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Les columnes del 8 i del 13 d'octubre corresponen als vols de prova 5 i 6 (en el 6, el rang és el dels dos vols). La vibració s'ha calculat amb els missatges \texttt{VIBE} dels \emph{logs}, només amb els motors en marxa; la mediana de VibeZ és de 3,9~m/s\textsuperscript{2} al vol 5 i de 5,0--5,3~m/s\textsuperscript{2} al vol 6. Els guions són mètriques que no s'han calculat per a aquests vols.
+
+\section{Autonomia i millora de rendiment}
+\label{sec:autonomia}
+
+L'autonomia és la limitació més gran de la plataforma actual. El \emph{hover} al 45~\% de \emph{throttle} (\cref{tab:progressio}) és estable, però el sistema carrega 520~g de càmera APS-C amb un grup propulsor que no es va escollir per eficiència (\cref{sec:propulsor}): funciona, però el preu és el temps de vol. Aquesta secció compara les opcions de millora per cost i guany esperat; el grup propulsor es detalla a la secció següent.
+
+\begin{table}[H]
+    \centering
+    \caption{Opcions per millorar l'autonomia i el rendiment per bateria}
+    \label{tab:opcions-autonomia}
+    \small
+    \begin{tabular}{P{3.4cm}P{1.7cm}P{2.5cm}P{5.9cm}}
+        \toprule
+        Opció & Cost & Guany & Comentari \\
+        \midrule
+        Volar a 45--50~m & 0~€ & $+60$~\% d'àrea per bateria & Cal recalcular el \emph{grid} amb la focal de 25~mm; també relaxa el ritme de dispar (\cref{subsec:autonomia-altura}). \\
+        \emph{Notch} + Autotune & 0~€ & 5--10~\% & Veure \cref{subsec:autonomia-notch}. \\
+        Bateria Li-ion 6S2P & $\sim$120~€ & $\times 1{,}7$ temps de vol & Molicel P42A o P45B. Evitar Samsung 50E: 10~A per cel·la és poc per a un \emph{hover} de $\sim$17~A (\cref{subsec:autonomia-liion}). \\
+        Hèlixs de 8~polzades (motors actuals) & $\sim$15~€ & $+12$--$18$~\% d'autonomia & Aprofita el marge dels motors de 1100~KV (\cref{sec:propulsor}). \\
+        Motors 400--500~KV + hèlixs de 12--13~polzades & $\sim$140~€ & $\sim\times 1{,}8$--$2$ temps de vol & El \emph{frame} de 500~mm actual ja ho permet; FC, F9P, ràdio i càmera es mantenen (\cref{subsec:autonomia-frame}). \\
+        Li-ion + motors i hèlixs nous & $\sim$260~€ & 30+~min & El salt real a plataforma de \emph{survey}. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Pujar l'alçada de vol (cost zero)}
+\label{subsec:autonomia-altura}
+
+L'amplada de la franja fotografiada en cada passada és proporcional a l'alçada ($H \cdot 23{,}5/25$~m amb el sensor i l'òptica actuals, \cref{tab:gsd-altura}). Volant més alt es cobreix la mateixa àrea amb menys passades i, per tant, menys temps de vol: el guany és directament el quocient d'alçades. El vol de prova 5 es va fer a 30~m, de manera que pujar a 48~m dona el $+60$~\% d'àrea per bateria (45~m: $+50$~\%; 50~m: $+67$~\%), com ja es fa al vol de prova 6 (50~m).
+
+El cost és GSD: a 50~m segueix sent $\approx 0{,}8$~cm/px, per sota del rang d'1--2~cm/px que es considera suficient per a topografia de precisió, de manera que hi ha marge per pujar sense perdre qualitat.
+
+Pujar també relaxa el ritme de dispar. Amb un 80~\% de solapament frontal i un 70~\% de lateral, la distància entre fotos i entre línies creix amb l'alçada (suposant el costat curt del sensor al llarg de la ruta); a la velocitat actual de 5~m/s (\texttt{WPNAV\_SPEED=500}, \cref{tab:canvis-seguretat}), l'interval entre dispars és el de \cref{tab:ritme-dispar}.
+
+\begin{table}[H]
+    \centering
+    \caption{Espaiat del \emph{grid} i interval de dispar segons l'alçada (25~mm, 80/70~\%, 5~m/s)}
+    \label{tab:ritme-dispar}
+    \small
+    \begin{tabular}{ccccc}
+        \toprule
+        $H$ (m) & GSD (cm/px) & Entre fotos (m) & Entre línies (m) & Interval (s) \\
+        \midrule
+        30 & 0,47 & 3,7 & 8,5 & 0,75 \\
+        40 & 0,63 & 5,0 & 11,3 & 1,00 \\
+        45 & 0,71 & 5,6 & 12,7 & 1,12 \\
+        50 & 0,78 & 6,2 & 14,1 & 1,25 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+El nou \texttt{CAM1\_DURATION=1.0} (\cref{tab:canvis-camera}) obliga a un interval mínim d'aproximadament 1~s entre ordres, de manera que a 40~m i 5~m/s ja s'està al límit, i a 30~m (0,75~s entre fotos) no seria viable amb aquests solapaments. A 45--50~m queda un petit marge, i a més es disparen menys fotos en total (menys dades a processar).
+
+\subsection{\emph{Notch} i Autotune}
+\label{subsec:autonomia-notch}
+
+El filtre \emph{notch} harmònic (configurat a partir de la freqüència mesurada amb FFT en \emph{hover} i de les RPM de l'ESC) retira el soroll de vibració del llaç de control. Amb menys soroll, el controlador no ha de gastar autoritat en corregir-lo i els motors treballen més nets. L'Autotune, un cop el \emph{notch} està ben posat, permet apujar guanys sense reintroduir oscil·lació. El guany estimat és modest (5--10~\%), però no costa res.
+
+\subsection{Bateria Li-ion 6S2P}
+\label{subsec:autonomia-liion}
+
+Un \emph{pack} 6S2P de cel·les 21700 de 4200~mAh (Molicel P42A) té $\approx 8{,}4$~Ah a $\approx 21{,}6$~V nominals, uns 181~Wh, davant els $\approx 89$~Wh del LiPo 6S 4000~mAh actual: més del doble d'energia. Com que el \emph{pack} també pesa més, el guany net de temps de vol s'estima en $\times 1{,}7$ i no $\times 2$.
+
+L'elecció de la cel·la és crítica per la corrent. Segons la majoria de distribuïdors (xifres que cal contrastar amb el \emph{datasheet} del fabricant abans de comprar), la P42A (i la P45B) admet 45~A continus per cel·la, mentre que la Samsung 50E només 9,8~A. Amb un \emph{hover} de $\sim$17~A repartit en dues cel·les en paral·lel, cada cel·la porta $\sim$8,5~A: la 50E ja estaria al 87~\% del seu límit només volant estacionari, sense marge per maniobres ni per un \emph{sag} gran, mentre que la P42A treballa al 19~\%.
+
+\subsection{Hèlixs grans i motors de KV baix}
+\label{subsec:autonomia-frame}
+
+És el factor dominant: l'eficiència d'un multirotor depèn de la càrrega de disc (empenta per unitat d'àrea escombrada), de manera que hèlixs més grans redueixen de forma directa la potència necessària en \emph{hover}. El \emph{frame} actual, de 500~mm entre eixos, ja admet hèlixs de fins a 13~polzades, però els motors de 1100~KV no hi són compatibles: el canvi té dos nivells (hèlixs de 8~polzades amb els motors actuals, o 12--13~polzades amb motors de 400--500~KV). La derivació, les compatibilitats KV--hèlix i el protocol de mesura es desenvolupen a \cref{sec:propulsor}. L'electrònica (FC, els dos F9P, la ràdio i la càmera) es manté sense canvis.
+
+\section{Optimització del grup propulsor}
+\label{sec:propulsor}
+
+\subsection{Punt de partida i condicionant inicial}
+\label{subsec:propulsor-inicial}
+
+La configuració propulsora inicial del prototip va ser:
+
+\begin{table}[H]
+    \centering
+    \caption{Configuració propulsora inicial}
+    \label{tab:propulsor-inicial}
+    \begin{tabular}{ll}
+        \toprule
+        Element & Especificació \\
+        \midrule
+        \emph{Frame} & Quad X, 500~mm entre eixos \\
+        Motors & Pilotix 2808, 1100~KV \\
+        Hèlixs & HQProp 7 $\times$ 4 $\times$ 3 (tripala) \\
+        Bateria & LiPo 6S 4000~mAh \\
+        AUW & 2,2~kg (inclosa la càrrega útil fotogràfica) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+L'elecció de les hèlixs de 7~polzades \textbf{no va respondre a un criteri de disseny sinó de disponibilitat}: eren hèlixs procedents d'un muntatge anterior i es van aprofitar per posar el prototip en vol sense cost addicional. Aquesta decisió va ser raonable en fase de posada en marxa --~el que calia validar aleshores era l'arquitectura RTK, el \emph{moving baseline} i la cadena de disparament de la càmera, no l'eficiència~-- però va quedar com a deute tècnic un cop el sistema va ser operatiu. La revisió posterior del grup propulsor és l'objecte d'aquesta secció.
+
+\subsection{Diagnòstic}
+\label{subsec:propulsor-diagnostic}
+
+L'anàlisi dels registres de vol i de la geometria del \emph{frame} va revelar dues inconsistències.
+
+\textbf{El \emph{frame} està infrautilitzat.} En una configuració en X, la distància entre motors adjacents és la diagonal dividida per $\sqrt{2}$:
+\[
+d_{\text{adjacent}} = \frac{500}{\sqrt{2}} \approx 354~\text{mm}
+\]
+Això permet hèlixs de fins a $\sim$330~mm (13~polzades) sense solapament entre discs. Amb hèlixs de 7~polzades (178~mm) s'estava aprofitant \textbf{només un 30~\% de l'àrea de disc disponible}.
+
+\textbf{La relació empenta/pes és excessiva per a una plataforma de cartografia.} El paràmetre \texttt{MOT\_THST\_HOVER}, après en vol, és de 0,23: el \emph{hover} es manté amb una fracció baixa de l'empenta disponible. La relació empenta/pes resultant és de $\sim$3,1:1 quan per a una plataforma de cartografia n'hi ha prou amb 2:1. Un grup propulsor sobredimensionat en empenta i infradimensionat en àrea de disc treballa lluny del seu punt d'eficiència màxima.
+
+Tots dos símptomes apunten al mateix: \textbf{el diàmetre de l'hèlix és el factor limitant}.
+
+\subsection{Fonament teòric}
+\label{subsec:propulsor-teoria}
+
+La potència induïda que un rotor necessita per sostenir una empenta $T$ en estacionari ve donada per la teoria de quantitat de moviment:
+\[
+P_i = T \sqrt{\frac{T}{2\rho A}}, \qquad A = \frac{\pi D^2}{4}
+\]
+on $\rho$ és la densitat de l'aire i $A$ l'àrea de disc. Com que $P_i \propto 1/\sqrt{A} \propto 1/D$, \textbf{augmentar el diàmetre redueix la potència necessària de manera directa}. La magnitud rellevant és la càrrega de disc $T/A$: com més baixa, més eficient és el rotor.
+
+Aplicat al cas ($T = 550$~g per motor, $\rho = 1{,}225$~kg/m\textsuperscript{3}):
+
+\begin{table}[H]
+    \centering
+    \caption{Potència induïda ideal en \emph{hover} segons el diàmetre de l'hèlix}
+    \label{tab:potencia-induida}
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        Hèlix & Àrea de disc & Càrrega de disc & $P_i$ per motor & $P_i$ total \\
+        \midrule
+        7 polzades & 248~cm\textsuperscript{2} & 22,2~kg/m\textsuperscript{2} & 50,8~W & 203~W \\
+        \textbf{8 polzades} & \textbf{324~cm\textsuperscript{2}} & \textbf{17,0~kg/m\textsuperscript{2}} & \textbf{44,5~W} & \textbf{178~W} \\
+        13 polzades & 857~cm\textsuperscript{2} & 6,4~kg/m\textsuperscript{2} & 27,4~W & 109~W \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+El pas de 7 a 8~polzades redueix la potència induïda ideal un \textbf{12,4~\%}; el pas a 13~polzades, un \textbf{46~\%}.
+
+Aquests valors són el límit teòric: la potència real inclou la resistència de perfil de les pales (factor de mèrit típic 0,65--0,75) i el rendiment del conjunt motor-ESC. A la pràctica el guany total s'aproxima al de la component induïda, que és dominant en estacionari.
+
+\subsection{Restricció de compatibilitat motor--hèlix}
+\label{subsec:propulsor-kv}
+
+L'àrea de disc no es pot augmentar lliurement: el KV del motor ha de correspondre al diàmetre de l'hèlix. Un motor amb KV massa alt per a la seva hèlix treballa a parell elevat i poques revolucions, lluny del seu punt de màxim rendiment, i el guany aerodinàmic es perd en pèrdues elèctriques i tèrmiques.
+
+\begin{table}[H]
+    \centering
+    \caption{KV adequat segons el diàmetre de l'hèlix (tensió 6S)}
+    \label{tab:kv-compatibilitat}
+    \begin{tabular}{lcc}
+        \toprule
+        Hèlix & KV adequat & Motor actual (1100~KV) \\
+        \midrule
+        7 polzades & 1200--1400 & lleugerament baix \\
+        \textbf{8 polzades} & \textbf{950--1100} & \textbf{correspondència òptima} \\
+        9 polzades & 800--900 & $\sim$25~\% per sobre \\
+        12--13 polzades & 400--500 & incompatible \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Aquesta restricció explica un resultat contraintuïtiu: \textbf{les hèlixs de 9~polzades rendirien pitjor que les de 8} malgrat tenir més àrea de disc, perquè el desajust de KV penalitza el motor més del que el disc aporta. Les de 8~polzades constitueixen, doncs, l'òptim assolible \textbf{sense substituir els motors}.
+
+\subsection{Selecció de l'hèlix}
+\label{subsec:propulsor-seleccio}
+
+Un cop fixat el diàmetre, es van avaluar les opcions disponibles.
+
+\textbf{Nombre de pales.} A igualtat de diàmetre i empenta, una hèlix bipala és aerodinàmicament més eficient que una tripala. Tanmateix, l'oferta de 8~polzades per a multirotor és majoritàriament tripala, i les bipales disponibles (APC 8$\times$4.5MR i MRP) tenen un \textbf{límit de règim de $\sim$13\,100~min\textsuperscript{$-1$}}. Amb 1100~KV sobre 6S (24\,400~min\textsuperscript{$-1$} en buit) aquest límit es podria superar en maniobres a gas ple --~ràfegues, recuperacions, pujades de \emph{failsafe}~--, amb risc de trencament de pala. Amb una càrrega útil fotogràfica al dessota, el criteri de fiabilitat preval sobre el guany marginal d'eficiència.
+
+\textbf{Decisió:} es manté la configuració tripala i s'adopta una hèlix de \textbf{niló reforçat amb fibra de vidre}, dimensionada per als règims habituals en multirotors d'alta velocitat.
+
+\begin{table}[H]
+    \centering
+    \caption{Hèlixs candidates de 8~polzades}
+    \label{tab:helix-candidates}
+    \small
+    \begin{tabular}{llcP{6.4cm}}
+        \toprule
+        Candidata & Pas & Massa & Observacions \\
+        \midrule
+        \textbf{HQProp LR8X4.2X3} & 4,2 pol. & -- & Gamma \emph{Long Range}, dissenyada per a creuer eficient amb càrrega útil \\
+        HQProp MacroQuad 8$\times$4$\times$3 & 4,0 pol. & 12,8~g & Boixa 15,7~mm, forat 9,5/5~mm (anells no inclosos) \\
+        Gemfan 8040-3 & 4,0 pol. & -- & Equivalent, àmplia disponibilitat a Europa \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+S'escull la \textbf{HQProp LR8X4.2X3}. La relació pas/diàmetre (0,53) és inferior a la de la configuració inicial (0,57), cosa que afavoreix el rendiment en estacionari i creuer lent, que és el règim de treball d'una missió de cartografia.
+
+\subsection{Verificacions prèvies al muntatge}
+\label{subsec:propulsor-verificacions}
+
+\begin{itemize}
+    \item \textbf{Diàmetre d'eix:} 5~mm, o anells adaptadors.
+    \item \textbf{Camp de visió de la càmera:} el pas de 7 a 8~polzades afegeix 12,7~mm de radi per hèlix. Cal confirmar que les pales no entren al fotograma amb l'òptica de 25~mm en muntatge nadir.
+    \item \textbf{Distància al terra} amb el tren d'aterratge actual.
+    \item \textbf{Marge de corrent de l'ESC:} el corrent per motor disminueix en augmentar el diàmetre, de manera que no cal revisar el dimensionament.
+\end{itemize}
+
+\subsection{Primera prova amb hèlixs de 8 polzades (20 d'octubre)}
+\label{subsec:propulsor-8in}
+
+La primera prova amb les hèlixs de 8~polzades va quedar en dos armats avortats. En tots dos, el patró va ser el mateix: mode Loiter, rampa d'enlairament amb sortida de motors del 43--55~\%, 25--31~A, tensió superior a 23,85~V, i el \emph{log} s'acaba entre 0,1 i 0,5~s després, sense \emph{failsafe} ni error registrat.
+
+El controlador es manté tranquil i els quatre motors són simètrics (dins del $\pm 2$~\%). La vibració, en canvi, és molt superior a la dels vols anteriors: 15--35~m/s\textsuperscript{2} al primer armat i 32--92~m/s\textsuperscript{2} (amb \emph{clipping}) al segon, davant d'una mediana de 3--5~m/s\textsuperscript{2} i un màxim de $\sim$16~m/s\textsuperscript{2} als vols previs. L'IMU en brut mostra una vibració tonal --~pics estrets a la freqüència de rotació, que creixen amb l'acceleració (127--134~Hz $\rightarrow$ 159--173~Hz)~-- i no de banda ampla, cosa que apunta a desequilibri de l'hèlix (component 1$\times$) més que no pas a fregament. Els paràmetres i filtres no es van retocar per al canvi d'hèlix. La causa exacta del tall del \emph{log} no s'ha determinat; la hipòtesi de treball és el desequilibri de les hèlixs, que cal descartar balancejant-les abans de repetir la prova.
+
+\subsection{Reajustament del control}
+\label{subsec:propulsor-control}
+
+El canvi de diàmetre modifica la inèrcia rotacional i l'autoritat de control, de manera que els guanys del llaç de velocitat angular deixen de ser vàlids. Després del muntatge cal:
+
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Refer el filtre \emph{notch} harmònic.} La freqüència fonamental dels motors baixa en augmentar el diàmetre. Procediment: \texttt{INS\_RAW\_LOG\_OPT = 9}, vol de 60--90~s amb maniobres variades, anàlisi amb l'eina \emph{Filter Review} d'ArduPilot.
+    \item \textbf{Reduir els guanys P i D} dels eixos de \emph{roll} i \emph{pitch} com a punt de partida conservador, i executar \textbf{Autotune} eix per eix un cop verificat que el vol és estable.
+\end{enumerate}
+
+\subsection{Protocol de mesura}
+\label{subsec:propulsor-mesura}
+
+Per quantificar el guany real s'estableix un protocol de comparació controlada. \textbf{Requisit previ: calibració del sensor de corrent i de tensió} (\texttt{BATT\_AMP\_PERVLT}, \texttt{BATT\_VOLT\_MULT}), sense la qual les mesures d'energia no són vàlides. Aquest requisit ja està complert (\cref{tab:canvis-seguretat}).
+
+\textbf{Condicions idèntiques entre assaigs:} mateixa quadrícula, altura, velocitat de creuer, càrrega útil, massa de bateria i condicions de vent ($< 3$~m/s).
+
+\textbf{Variables a registrar en cada assaig:}
+
+\begin{table}[H]
+    \centering
+    \caption{Variables a registrar per assaig}
+    \label{tab:variables-mesura}
+    \begin{tabular}{ll}
+        \toprule
+        Variable & Origen \\
+        \midrule
+        Energia consumida (mAh) & \texttt{BAT.CurrTot} al registre \\
+        Temps armat (s) & marques \texttt{ARMED} / \texttt{DISARMED} \\
+        Consum mitjà (A) & \texttt{BAT.Curr} \\
+        Potència mitjana (W) & \texttt{BAT.Curr} $\times$ \texttt{BAT.Volt} \\
+        Eficiència (g/W) & AUW $\div$ potència mitjana \\
+        \texttt{MOT\_THST\_HOVER} & paràmetre après en vol \\
+        Superfície coberta (ha) & planificació de la missió \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Mètriques derivades:} mAh per minut, \textbf{hectàrees per bateria} (la magnitud rellevant per a l'operador) i g/W (la magnitud rellevant per a l'enginyeria).
+
+\begin{table}[H]
+    \centering
+    \caption{Comparació de grup propulsor: configuració inicial (mesurada al vol de prova 6, vol 2) i hèlixs de 8~polzades (pendent)}
+    \label{tab:resultats-propulsor}
+    \begin{tabular}{lccc}
+        \toprule
+        Mètrica & 7 $\times$ 4 $\times$ 3 (inicial) & 8 $\times$ 4,2 $\times$ 3 & Variació \\
+        \midrule
+        Energia fins al \emph{failsafe} (mAh) & 2\,012 & pendent & \\
+        Temps fins al \emph{failsafe} (min) & 10,6 & pendent & \\
+        Consum mitjà (A) & 22 & pendent & \\
+        Potència mitjana (W) & $\approx 500$ & pendent & \\
+        Eficiència (g/W) & $\approx 4{,}4$ & pendent & \\
+        \texttt{MOT\_THST\_HOVER} & 0,23 & pendent & \\
+        Hectàrees per bateria a 50~m & 3,1 & pendent & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\noindent\textit{Estimació prèvia: $+12$--$18$~\% d'autonomia.}
+
+\smallskip
+\noindent Els valors de la columna inicial provenen del vol 2 del vol de prova 6 (\cref{sec:vol6}), mesurats amb el sensor de corrent ja calibrat. La potència és el producte del corrent mitjà per una tensió mitjana de $\sim$22,5~V. Els dos vols de la prova 6 acaben per \emph{failsafe} de bateria baixa quan només s'ha gastat el 47--50~\% de la capacitat nominal, per la caiguda de tensió sota càrrega (\cref{sec:vol6}): l'autonomia útil la limita la tensió, no l'energia.
+
+\subsection{Línia de continuïtat}
+\label{subsec:propulsor-continuitat}
+
+La configuració de 8~polzades esgota el marge disponible amb els motors actuals. L'aprofitament complet del \emph{frame} de 500~mm requereix substituir el grup motor:
+
+\begin{table}[H]
+    \centering
+    \caption{Configuracions de grup propulsor i autonomia estimada}
+    \label{tab:continuitat-propulsor}
+    \small
+    \begin{tabular}{lccc}
+        \toprule
+        Configuració & Càrrega de disc & $P_i$ teòrica & Autonomia estimada \\
+        \midrule
+        7 polzades (inicial) & 22,2~kg/m\textsuperscript{2} & 203~W & 10--11~min \\
+        8 polzades & 17,0~kg/m\textsuperscript{2} & 178~W & 12--13~min \\
+        \textbf{12--13 polzades, motors 450--500~KV} & \textbf{6,4~kg/m\textsuperscript{2}} & \textbf{109~W} & \textbf{18--22~min} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Candidats: Sunnysky X3108 480~KV o T-Motor MN3110 470~KV amb hèlixs 12 $\times$ 4 o 13 $\times$ 4,4. La relació empenta/pes resultant ($\sim$2,6:1) continua sent adequada per a operació de cartografia. Cal verificar el patró de fixació dels braços: els motors de la sèrie 28xx solen muntar amb patró 16 $\times$ 16~mm i els 31xx amb 19 $\times$ 19 o 25 $\times$ 25~mm.
+
+Combinat amb un \emph{pack} \textbf{Li-ion 6S2P} de cel·les d'alta descàrrega (Molicel P42A o P45B, 206~Wh/kg enfront dels 143~Wh/kg del LiPo actual; \cref{subsec:autonomia-liion}), l'autonomia projectada supera els 30~minuts.
+
+\subsection{Conclusió}
+
+La configuració inicial de 7~polzades va ser una decisió d'aprofitament de material, adequada per a la fase de posada en marxa però subòptima un cop el sistema va entrar en operació. L'anàlisi posterior identifica el diàmetre d'hèlix com el factor limitant de l'eficiència i estableix dues millores de cost molt diferent:
+
+\begin{itemize}
+    \item \textbf{Canvi a hèlixs de 8~polzades} ($\sim$15~€): aprofita el marge que permeten els motors actuals.
+    \item \textbf{Canvi de grup motor a 12--13~polzades} ($\sim$140~€): aprofita el \emph{frame} ja existent i gairebé dobla l'autonomia.
+\end{itemize}
+
+Cap de les dues requereix modificar l'arquitectura RTK, la cadena fotogràfica ni el programari de vol, que es mantenen íntegres.
+
+
+\section{Estat i treball pendent}
+\label{sec:pendents-proves-vol}
+
+\subsection{Resolt durant la campanya}
+\begin{itemize}
+    \item Control estable i \emph{moving baseline} amb RTK Fixed al 100~\% als dos receptors. La vibració, mesurada al \emph{log} (missatge \texttt{VIBE}) amb els motors en marxa, té una mediana de 2--5~m/s\textsuperscript{2} i un màxim de 10,8~m/s\textsuperscript{2} al vol de prova 5 i de 18,7~m/s\textsuperscript{2} al 6, sense \emph{clipping} (\cref{tab:progressio}).
+    \item Sensor de corrent i de tensió calibrats (\texttt{BATT\_AMP\_PERVLT}, \texttt{BATT\_VOLT\_MULT}); el sensor de corrent llegia per sota del valor real, cosa que va amagar el consum real fins al col·lapse de bateria del 4 de setembre.
+    \item Cadena de disparament de la càmera operativa: dispar IS-T, \emph{feedback} de la sabata al pin 55 (110 de 110 exposicions confirmades al vol 2 de la prova 6) i \emph{grid} planificat amb la focal real de 25~mm.
+    \item \emph{Baseline} lateral amb GPS1 a l'esquerra (\texttt{GPS1\_POS\_Y=$-0{,}19$}), amb \emph{yaw} GNSS vàlid.
+\end{itemize}
+
+\subsection{Pendent: proves i millores}
+\begin{itemize}
+    \item \emph{Notch} harmònic: mesurar la freqüència amb FFT en \emph{hover} i configurar-lo en mode 3 (RPM d'ESC); l'\emph{IMU batch sampler} ja és actiu (\texttt{INS\_LOG\_BAT\_MASK=1}). Verificar \texttt{SERVO\_BLH\_POLES=14} contra el RPM real, perquè el \emph{notch} en depèn. Autotune a continuació.
+    \item Bateria Li-ion 6S2P i, si cal més autonomia, canvi de grup motor (\cref{sec:autonomia}).
+    \item Punts de control i de comprovació a terra, mesurats amb la mateixa base i sessió que el vol, per afirmar una precisió (\cref{sec:gcp}).
+    \item Calcular per PPP el desplaçament de la primera sessió amb registre de la base (el servei ja desa el flux i la posició del \emph{survey-in} de cada sessió, \cref{sec:protocol-camp}) i comprovar que la conversió a RINEX funciona (\cref{subsec:efecte-surveyin}).
+    \item Repetir el vol de camp (vol de prova 6) amb el sol a més de 10--15$^{\circ}$ (\cref{sec:vol6}).
+    \item Pla de proves de precisió T1--T6 (\cref{tab:validacio}), amb el \emph{heading} GNSS i l'exactitud de la línia de base RTK; aplicació del PPK (\cref{sec:processament}).
+\end{itemize}

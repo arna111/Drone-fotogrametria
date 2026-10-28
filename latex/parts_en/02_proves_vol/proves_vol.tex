@@ -1,0 +1,540 @@
+\chapter{Flight tests and tuning}
+\label{chap:proves-vol}
+
+This chapter collects the flight-test and tuning campaign carried out between August and October 2026, before operating in \emph{surveys} (\cref{chap:vols-prova}). It records the incidents found in the flight control, the RTK GPS, the camera module and the propulsion group, the causes identified and the changes applied to solve them.
+
+\begin{table}[H]
+    \centering
+    \caption{Flight sessions of the campaign}
+    \label{tab:sessions-vol}
+    \small
+    \begin{tabular}{llP{8.3cm}}
+        \toprule
+        Date & Session & Result \\
+        \midrule
+        6 August & Control tuning & Severe oscillation; \emph{crash} \\
+        8 August & Control tuning & Two correct flights; \emph{crash} when changing the orientation \\
+        10 August & GPS test & Motor failure in flight; \emph{crash}; \emph{moving baseline} error \\
+        27 August & Four flights & Four clean flights, RTK Fixed 100~\% \\
+        4 September & \emph{Grid} mission & Cut by the \emph{geofence}; battery collapse \\
+        8 October & Flight test 5 & 118 photos; orthomosaic and DSM (\cref{sec:vol5}) \\
+        13 October & Flight test 6 & Two flights at dawn; one usable batch (\cref{sec:vol6}) \\
+        20 October & 8-inch propellers & Two aborted arms (\cref{subsec:propulsor-8in}) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Initial controller configuration}
+\label{sec:config-inicial}
+
+The first review of the controller parameter file detected and corrected the following problems:
+
+\begin{itemize}
+    \item \texttt{FRAME\_CLASS} unassigned (now Quad, X).
+    \item GPS position \emph{offsets} (\texttt{GPS1\_POS\_*} / \texttt{GPS2\_POS\_*}) at zero; measured with respect to the centre of gravity (\cref{tab:params-gps-mb}).
+    \item \texttt{EK3\_SRC1\_YAW} pointing to the compass: changed to GPS \emph{yaw}.
+    \item Compass enabled with no sensor connected: disabled.
+    \item \texttt{BATT\_MONITOR} at 0: changed to analogue voltage and current.
+    \item \texttt{MOT\_PWM\_TYPE} at PWM: changed to DShot300.
+    \item All flight modes at Stabilize: assigned Stabilize, AltHold, Loiter, Auto, Guided and RTL.
+    \item \texttt{SERVO9} assigned to \emph{Scripting1} with no real use: disabled.
+\end{itemize}
+
+\section{Chronology of incidents}
+\label{sec:cronologia-incidents}
+
+\subsection{6 August -- Severe oscillation and \emph{crash}}
+
+\emph{Wobbling} in the arms when raising throttle, with repeatable lateral drift. In the \emph{log}, the \emph{rate} loop changed sign in 65~\% of the samples, with errors of up to $301^{\circ}$/s. It ended with \texttt{Crash: Disarming: AngErr=51>30}.
+
+Causes identified:
+\begin{itemize}
+    \item Drone heavily overpowered (\texttt{MOT\_THST\_HOVER=0.20}, \emph{hover} at 20~\%) with default PIDs designed for a \emph{hover} of 35--50~\%.
+    \item Motors saturating at the minimum because of a too high \texttt{MOT\_SPIN\_MIN}.
+    \item \texttt{MOT\_THST\_EXPO=0.8}.
+    \item No \emph{notch} filter, with vibrations of 44~m/s\textsuperscript{2} and 42 \emph{clips}.
+    \item A \texttt{SAVE\_TRIM} done in flight had contaminated \texttt{AHRS\_TRIM\_X}.
+\end{itemize}
+
+\subsection{8 August -- \emph{Crash} due to an orientation change}
+
+The first two flights of the day went well (oscillation down from 65~\% to 3--6~\%, zero \emph{clips}). On the third, when setting \texttt{AHRS\_ORIENTATION} from 4 to 0, the drone flipped in 0.4~s with the controller saturated opposite to the rotation: pure positive feedback.
+
+The real problem was not the orientation but the polarity of channel 2: \emph{roll} responded correctly, only \emph{pitch} was inverted. It was solved by inverting the \emph{elevator} on the Radiomaster.
+
+\subsection{10 August -- \emph{Crash} due to motor failure}
+
+Stable \emph{hover} for 10~s, then sudden loss. Motor M3 was commanded to 2000 with no effect; the current dropped from 16~A to 8.9~A, the voltage recovered and the vibrations fell just before the exit: unmistakable signature of a motor stopped in flight.
+
+The same day it was identified that \texttt{GPS\_DRV\_OPTIONS=1} prevented the \emph{moving baseline}: this value assumes a direct cable between the UART2 ports of the two F9Ps, which does not exist in this build. The \emph{rover} never reached RTK Fixed, hence the \texttt{PreArm: GPS[2] yaw not available} (\cref{subsec:gps-moving-baseline}).
+
+\subsection{27 August -- Four clean flights}
+
+First session without incidents. GPS[0] and GPS[1] at 100~\% RTK Fixed, GPS \emph{yaw} available in all samples, vibrations of 11--16~m/s\textsuperscript{2} and zero \emph{clips} in the four flights.
+
+\subsection{4 September -- Mission cut and \emph{crash} due to battery}
+
+\textbf{Flight 1:} the mission was aborted at \emph{waypoint} 25 of 87 by a \emph{geofence} \emph{breach}. The initial radius of 300~m was insufficient for the new field (farthest \emph{waypoint} at 566~m; 41 of the 87 outside the radius). The photos came out blurred.
+
+\textbf{Flight 2:} battery collapse. From 22.4~V to 8~V in 25~seconds with only 5~A of load. The counter showed 213~mAh consumed from a 4000 \emph{pack}, impossible: the current sensor was badly calibrated. The \emph{sag} went from 0.63~V to 1.79~V in 18~seconds: internal resistance tripled, a cell dying. The \emph{failsafes} acted correctly (RTL at 758~s, Land at 763~s), but there was no energy left to land.
+
+\subsection{4--13 September -- Camera problems}
+\label{subsec:problemes-camera}
+
+In flight 1: 121 trigger commands, only 33 confirmed exposures, all with a constant delay of 1.16~s. In flight 2: 50 commands, zero photos.
+
+A first diagnosis attributed the EXIF readings \texttt{FNumber=0}, \texttt{FocalLength=0} and \texttt{LensModel} set to \texttt{"----"} to a failure of the electrical contacts. In fact it is the normal behaviour of a manual TTArtisan 25~mm f/2, which has no electronic contacts.
+
+Real causes:
+\begin{itemize}
+    \item The MAP2 was in AF-T mode (\texttt{CAM1\_SERVO\_ON=1300}), which does a useless 1~s pre-focus with a manual lens: hence the constant delay.
+    \item \texttt{CAM1\_SERVO\_OFF=1100} outside the rest range expected by the MAP2 (1400--1600).
+    \item \texttt{CAM1\_DURATION=0.1} too short for the MAP2 to read the command (IS-T mode wants 1.0~s).
+    \item \emph{Release w/o Lens} possibly disabled, which blocks the shutter with a lens without contacts.
+    \item Slow shutter and active autofocus in flight 1 (cause of the blurred photos).
+    \item The \emph{grid} configuration assumed 20~mm when the real lens is 25~mm: all the computed overlap was wrong.
+\end{itemize}
+
+Once the changes were applied, flight 2 of test 6 gave 110 trigger commands, 110 \emph{feedback} confirmations and 110 photographs (\cref{sec:vol6}).
+
+\section{Parameter changes applied}
+\label{sec:canvis-aplicats}
+
+\subsection{Control (6 August)}
+
+\begin{table}[H]
+    \centering
+    \caption{Control tuning after the oscillation of 6 August}
+    \label{tab:canvis-control}
+    \begin{tabular}{lll}
+        \toprule
+        Parameter & From & To \\
+        \midrule
+        \texttt{ATC\_RAT\_RLL\_P} / \texttt{PIT\_P} & 0.135 & 0.070 \\
+        \texttt{ATC\_RAT\_RLL\_I} / \texttt{PIT\_I} & 0.135 & 0.070 \\
+        \texttt{ATC\_RAT\_RLL\_D} / \texttt{PIT\_D} & 0.0036 & 0.0020 \\
+        \texttt{ATC\_RAT\_YAW\_P} & 0.18 & 0.100 \\
+        \texttt{MOT\_THST\_EXPO} & 0.8 & 0.65 \\
+        \texttt{MOT\_SPIN\_ARM} & 0.10 & 0.04 \\
+        \texttt{MOT\_SPIN\_MIN} & 0.15 & 0.06 \\
+        \texttt{ATC\_RAT\_*\_FLTD} / \texttt{FLTT} & 20 & 10 \\
+        \texttt{AHRS\_TRIM\_X} / \texttt{Y} & contaminated & recalibrated ($\approx 0$) \\
+        \texttt{LOG\_BITMASK} & 180222 & 196607 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{GPS}
+
+\begin{table}[H]
+    \centering
+    \caption{GPS configuration changes after the incident of 10 August}
+    \label{tab:canvis-gps}
+    \begin{tabular}{lll}
+        \toprule
+        Parameter & From & To \\
+        \midrule
+        \texttt{GPS\_DRV\_OPTIONS} & 1 & 0 \\
+        \texttt{GPS1\_POS\_Y} / \texttt{GPS2\_POS\_Y} & 0 & $-0.19$ / $+0.19$ \\
+        \texttt{GPS1\_POS\_Z} / \texttt{GPS2\_POS\_Z} & 0 & $-0.10$ / $-0.10$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Safety and battery}
+
+\begin{table}[H]
+    \centering
+    \caption{Safety (\emph{failsafes}, \emph{geofence}) and battery changes after 4 September}
+    \label{tab:canvis-seguretat}
+    \begin{tabular}{lll}
+        \toprule
+        Parameter & From & To \\
+        \midrule
+        \texttt{BATT\_FS\_LOW\_ACT} & 0 & 2 (RTL) \\
+        \texttt{BATT\_FS\_CRT\_ACT} & 0 & 1 (Land) \\
+        \texttt{BATT\_LOW\_VOLT} / \texttt{CRT\_VOLT} & -- & 21.6 / 20.4 \\
+        \texttt{BATT\_AMP\_PERVLT} & uncalibrated & 87.73 \\
+        \texttt{BATT\_VOLT\_MULT} & uncalibrated & 10.82 \\
+        \texttt{FENCE\_ENABLE} & 0 & 1 \\
+        \texttt{FENCE\_RADIUS} & 300 & 700 \\
+        \texttt{WPNAV\_SPEED} & 1000 & 500 \\
+        \texttt{SR1\_*} (RFD telemetry) & 0 & active \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Camera}
+\label{subsec:canvis-camera-pendents}
+
+\begin{table}[H]
+    \centering
+    \caption{Camera changes derived from the diagnosis of \cref{subsec:problemes-camera}}
+    \label{tab:canvis-camera}
+    \begin{tabular}{lll}
+        \toprule
+        Parameter & Before & Now \\
+        \midrule
+        \texttt{CAM1\_SERVO\_ON} & 1300 (AF-T) & 1700 (IS-T) \\
+        \texttt{CAM1\_SERVO\_OFF} & 1100 & 1500 \\
+        \texttt{CAM1\_DURATION} & 0.1 & 1.0 \\
+        \texttt{SERVO5\_TRIM} & 1100 & 1500 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The physical camera setup is in \cref{tab:ajust-camera}. The Mission Planner \emph{grid} is planned with the real 25~mm focal length.
+
+\section{Measured progression}
+\label{sec:progressio-mesurada}
+
+\begin{table}[H]
+    \centering
+    \caption{Progression of the flight metrics over the campaign}
+    \label{tab:progressio}
+    \begin{tabular}{lcccccc}
+        \toprule
+        Metric & 6 Aug & 8 Aug & 27 Aug & 4 Sep & 8 Oct & 13 Oct \\
+        \midrule
+        \emph{Roll rate} sign changes & 65~\% & 3--6~\% & 8--9~\% & stable & -- & -- \\
+        VibeZ max.\ (m/s\textsuperscript{2}) & 44 & 40 & 11--16 & 14--18 & 10.8 & 14.1--15.7 \\
+        \emph{Clips} & 42 & 0--29 & 0 & 0 & 0 & 0 \\
+        GPS[0] RTK Fixed & -- & -- & 100~\% & 100~\% & 100~\% & -- \\
+        GPS[1] RTK Fixed & -- & 0~\% & 100~\% & 100~\% & 100~\% & -- \\
+        \emph{Hover throttle} & 20~\% & 20~\% & 45~\% & 45~\% & -- & -- \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The 8 and 13 October columns correspond to flight tests 5 and 6 (for 6, the range covers both flights). Vibration was computed from the \texttt{VIBE} messages of the \emph{logs}, only with the motors running; the median VibeZ is 3.9~m/s\textsuperscript{2} in flight 5 and 5.0--5.3~m/s\textsuperscript{2} in flight 6. Dashes are metrics that have not been computed for these flights.
+
+\section{Endurance and performance improvement}
+\label{sec:autonomia}
+
+Endurance is the biggest limitation of the current platform. \emph{Hover} at 45~\% \emph{throttle} (\cref{tab:progressio}) is stable, but the system carries 520~g of APS-C camera with a propulsion group that was not chosen for efficiency (\cref{sec:propulsor}): it works, but the price is flight time. This section compares the improvement options by cost and expected gain; the propulsion group is detailed in the next section.
+
+\begin{table}[H]
+    \centering
+    \caption{Options to improve endurance and performance per battery}
+    \label{tab:opcions-autonomia}
+    \small
+    \begin{tabular}{P{3.4cm}P{1.7cm}P{2.5cm}P{5.9cm}}
+        \toprule
+        Option & Cost & Gain & Comment \\
+        \midrule
+        Fly at 45--50~m & €0 & $+60$~\% area per battery & The \emph{grid} must be recomputed with the 25~mm focal length; it also relaxes the trigger rate (\cref{subsec:autonomia-altura}). \\
+        \emph{Notch} + Autotune & €0 & 5--10~\% & See \cref{subsec:autonomia-notch}. \\
+        6S2P Li-ion battery & $\sim$€120 & $\times 1.7$ flight time & Molicel P42A or P45B. Avoid Samsung 50E: 10~A per cell is little for a \emph{hover} of $\sim$17~A (\cref{subsec:autonomia-liion}). \\
+        8-inch propellers (current motors) & $\sim$€15 & $+12$--$18$~\% endurance & Uses the margin of the 1100~KV motors (\cref{sec:propulsor}). \\
+        400--500~KV motors + 12--13-inch propellers & $\sim$€140 & $\sim\times 1.8$--$2$ flight time & The current 500~mm \emph{frame} already allows it; FC, F9P, radio and camera stay (\cref{subsec:autonomia-frame}). \\
+        Li-ion + new motors and propellers & $\sim$€260 & 30+~min & The real jump to a \emph{survey} platform. \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Raising the flight height (zero cost)}
+\label{subsec:autonomia-altura}
+
+The width of the strip photographed in each pass is proportional to the height ($H \cdot 23.5/25$~m with the current sensor and optics, \cref{tab:gsd-altura}). Flying higher covers the same area with fewer passes and therefore less flight time: the gain is directly the ratio of heights. Flight test 5 was flown at 30~m, so going up to 48~m gives $+60$~\% of area per battery (45~m: $+50$~\%; 50~m: $+67$~\%), as is already done in flight test 6 (50~m).
+
+The cost is GSD: at 50~m it is still $\approx 0.8$~cm/px, below the 1--2~cm/px range considered sufficient for precision surveying, so there is room to go up without losing quality.
+
+Going up also relaxes the trigger rate. With 80~\% front overlap and 70~\% side overlap, the distance between photos and between lines grows with height (assuming the short side of the sensor along the route); at the current speed of 5~m/s (\texttt{WPNAV\_SPEED=500}, \cref{tab:canvis-seguretat}), the interval between triggers is that of \cref{tab:ritme-dispar}.
+
+\begin{table}[H]
+    \centering
+    \caption{\emph{Grid} spacing and trigger interval as a function of height (25~mm, 80/70~\%, 5~m/s)}
+    \label{tab:ritme-dispar}
+    \small
+    \begin{tabular}{ccccc}
+        \toprule
+        $H$ (m) & GSD (cm/px) & Between photos (m) & Between lines (m) & Interval (s) \\
+        \midrule
+        30 & 0.47 & 3.7 & 8.5 & 0.75 \\
+        40 & 0.63 & 5.0 & 11.3 & 1.00 \\
+        45 & 0.71 & 5.6 & 12.7 & 1.12 \\
+        50 & 0.78 & 6.2 & 14.1 & 1.25 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The new \texttt{CAM1\_DURATION=1.0} (\cref{tab:canvis-camera}) forces a minimum interval of about 1~s between commands, so at 40~m and 5~m/s it is already at the limit, and at 30~m (0.75~s between photos) it would not be viable with these overlaps. At 45--50~m there is a small margin, and in addition fewer photos are fired in total (less data to process).
+
+\subsection{\emph{Notch} and Autotune}
+\label{subsec:autonomia-notch}
+
+The harmonic \emph{notch} filter (configured from the frequency measured with FFT in \emph{hover} and from the ESC RPM) removes the vibration noise from the control loop. With less noise, the controller does not have to spend authority correcting it and the motors run cleaner. Autotune, once the \emph{notch} is well set, allows raising gains without reintroducing oscillation. The estimated gain is modest (5--10~\%), but it costs nothing.
+
+\subsection{6S2P Li-ion battery}
+\label{subsec:autonomia-liion}
+
+A 6S2P \emph{pack} of 21700 cells of 4200~mAh (Molicel P42A) has $\approx 8.4$~Ah at $\approx 21.6$~V nominal, about 181~Wh, compared with the $\approx 89$~Wh of the current 6S 4000~mAh LiPo: more than double the energy. Since the \emph{pack} also weighs more, the net flight-time gain is estimated at $\times 1.7$ and not $\times 2$.
+
+The choice of cell is critical for current. According to most distributors (figures that must be checked against the manufacturer's \emph{datasheet} before buying), the P42A (and the P45B) supports 45~A continuous per cell, while the Samsung 50E only 9.8~A. With a \emph{hover} of $\sim$17~A shared between two cells in parallel, each cell carries $\sim$8.5~A: the 50E would already be at 87~\% of its limit just hovering, with no margin for manoeuvres or for a large \emph{sag}, while the P42A works at 19~\%.
+
+\subsection{Large propellers and low-KV motors}
+\label{subsec:autonomia-frame}
+
+This is the dominant factor: the efficiency of a multirotor depends on the disc loading (thrust per unit of swept area), so larger propellers directly reduce the power needed in \emph{hover}. The current 500~mm-between-axes \emph{frame} already admits propellers of up to 13~inches, but the 1100~KV motors are not compatible with them: the change has two levels (8-inch propellers with the current motors, or 12--13~inches with 400--500~KV motors). The derivation, the KV--propeller compatibilities and the measurement protocol are developed in \cref{sec:propulsor}. The electronics (FC, the two F9Ps, the radio and the camera) stay unchanged.
+
+\section{Propulsion group optimisation}
+\label{sec:propulsor}
+
+\subsection{Starting point and initial constraint}
+\label{subsec:propulsor-inicial}
+
+The initial propulsion configuration of the prototype was:
+
+\begin{table}[H]
+    \centering
+    \caption{Initial propulsion configuration}
+    \label{tab:propulsor-inicial}
+    \begin{tabular}{ll}
+        \toprule
+        Element & Specification \\
+        \midrule
+        \emph{Frame} & Quad X, 500~mm between axes \\
+        Motors & Pilotix 2808, 1100~KV \\
+        Propellers & HQProp 7 $\times$ 4 $\times$ 3 (three-blade) \\
+        Battery & LiPo 6S 4000~mAh \\
+        AUW & 2.2~kg (including the photographic payload) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The choice of the 7-inch propellers \textbf{did not respond to a design criterion but to availability}: they were propellers from a previous build and were reused to put the prototype in the air at no additional cost. This decision was reasonable in the commissioning phase --~what had to be validated then was the RTK architecture, the \emph{moving baseline} and the camera triggering chain, not efficiency~-- but it remained as technical debt once the system was operational. The later review of the propulsion group is the subject of this section.
+
+\subsection{Diagnosis}
+\label{subsec:propulsor-diagnostic}
+
+The analysis of the flight logs and the \emph{frame} geometry revealed two inconsistencies.
+
+\textbf{The \emph{frame} is underused.} In an X configuration, the distance between adjacent motors is the diagonal divided by $\sqrt{2}$:
+\[
+d_{\text{adjacent}} = \frac{500}{\sqrt{2}} \approx 354~\text{mm}
+\]
+This allows propellers of up to $\sim$330~mm (13~inches) with no overlap between discs. With 7-inch propellers (178~mm), \textbf{only 30~\% of the available disc area} was being used.
+
+\textbf{The thrust-to-weight ratio is excessive for a mapping platform.} The \texttt{MOT\_THST\_HOVER} parameter, learned in flight, is 0.23: \emph{hover} is held with a low fraction of the available thrust. The resulting thrust-to-weight ratio is $\sim$3.1:1 when 2:1 is enough for a mapping platform. A propulsion group oversized in thrust and undersized in disc area works far from its point of maximum efficiency.
+
+Both symptoms point to the same thing: \textbf{the propeller diameter is the limiting factor}.
+
+\subsection{Theoretical basis}
+\label{subsec:propulsor-teoria}
+
+The induced power that a rotor needs to sustain a thrust $T$ in hover is given by momentum theory:
+\[
+P_i = T \sqrt{\frac{T}{2\rho A}}, \qquad A = \frac{\pi D^2}{4}
+\]
+where $\rho$ is the air density and $A$ the disc area. Since $P_i \propto 1/\sqrt{A} \propto 1/D$, \textbf{increasing the diameter directly reduces the power needed}. The relevant quantity is the disc loading $T/A$: the lower, the more efficient the rotor.
+
+Applied to the case ($T = 550$~g per motor, $\rho = 1.225$~kg/m\textsuperscript{3}):
+
+\begin{table}[H]
+    \centering
+    \caption{Ideal induced power in \emph{hover} as a function of propeller diameter}
+    \label{tab:potencia-induida}
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        Propeller & Disc area & Disc loading & $P_i$ per motor & $P_i$ total \\
+        \midrule
+        7 inches & 248~cm\textsuperscript{2} & 22.2~kg/m\textsuperscript{2} & 50.8~W & 203~W \\
+        \textbf{8 inches} & \textbf{324~cm\textsuperscript{2}} & \textbf{17.0~kg/m\textsuperscript{2}} & \textbf{44.5~W} & \textbf{178~W} \\
+        13 inches & 857~cm\textsuperscript{2} & 6.4~kg/m\textsuperscript{2} & 27.4~W & 109~W \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The step from 7 to 8~inches reduces the ideal induced power by \textbf{12.4~\%}; the step to 13~inches, by \textbf{46~\%}.
+
+These values are the theoretical limit: the real power includes the profile drag of the blades (typical figure of merit 0.65--0.75) and the efficiency of the motor-ESC assembly. In practice the total gain approaches that of the induced component, which is dominant in hover.
+
+\subsection{Motor--propeller compatibility constraint}
+\label{subsec:propulsor-kv}
+
+The disc area cannot be increased freely: the KV of the motor must correspond to the diameter of the propeller. A motor with too high a KV for its propeller works at high torque and few revolutions, far from its point of maximum efficiency, and the aerodynamic gain is lost in electrical and thermal losses.
+
+\begin{table}[H]
+    \centering
+    \caption{Suitable KV as a function of propeller diameter (6S voltage)}
+    \label{tab:kv-compatibilitat}
+    \begin{tabular}{lcc}
+        \toprule
+        Propeller & Suitable KV & Current motor (1100~KV) \\
+        \midrule
+        7 inches & 1200--1400 & slightly low \\
+        \textbf{8 inches} & \textbf{950--1100} & \textbf{optimal match} \\
+        9 inches & 800--900 & $\sim$25~\% above \\
+        12--13 inches & 400--500 & incompatible \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+This constraint explains a counter-intuitive result: \textbf{9-inch propellers would perform worse than 8-inch ones} despite having more disc area, because the KV mismatch penalises the motor more than the disc contributes. The 8-inch propellers are therefore the optimum attainable \textbf{without replacing the motors}.
+
+\subsection{Propeller selection}
+\label{subsec:propulsor-seleccio}
+
+Once the diameter was fixed, the available options were evaluated.
+
+\textbf{Number of blades.} At equal diameter and thrust, a two-blade propeller is aerodynamically more efficient than a three-blade one. However, the 8-inch offer for multirotors is mostly three-blade, and the available two-blade ones (APC 8$\times$4.5MR and MRP) have a \textbf{speed limit of $\sim$13,100~min\textsuperscript{$-1$}}. With 1100~KV on 6S (24,400~min\textsuperscript{$-1$} unloaded) this limit could be exceeded in full-throttle manoeuvres --~gusts, recoveries, \emph{failsafe} climbs~--, with a risk of blade breakage. With a photographic payload underneath, the reliability criterion prevails over the marginal efficiency gain.
+
+\textbf{Decision:} the three-blade configuration is kept and a \textbf{glass-fibre-reinforced nylon} propeller is adopted, sized for the speeds usual in high-speed multirotors.
+
+\begin{table}[H]
+    \centering
+    \caption{8-inch candidate propellers}
+    \label{tab:helix-candidates}
+    \small
+    \begin{tabular}{llcP{6.4cm}}
+        \toprule
+        Candidate & Pitch & Mass & Notes \\
+        \midrule
+        \textbf{HQProp LR8X4.2X3} & 4.2 in. & -- & \emph{Long Range} range, designed for efficient cruise with a payload \\
+        HQProp MacroQuad 8$\times$4$\times$3 & 4.0 in. & 12.8~g & Bore 15.7~mm, hole 9.5/5~mm (rings not included) \\
+        Gemfan 8040-3 & 4.0 in. & -- & Equivalent, wide availability in Europe \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The \textbf{HQProp LR8X4.2X3} is chosen. The pitch/diameter ratio (0.53) is lower than that of the initial configuration (0.57), which favours performance in hover and slow cruise, which is the working regime of a mapping mission.
+
+\subsection{Checks before mounting}
+\label{subsec:propulsor-verificacions}
+
+\begin{itemize}
+    \item \textbf{Shaft diameter:} 5~mm, or adapter rings.
+    \item \textbf{Camera field of view:} going from 7 to 8~inches adds 12.7~mm of radius per propeller. It must be confirmed that the blades do not enter the frame with the 25~mm lens in a nadir mount.
+    \item \textbf{Ground clearance} with the current landing gear.
+    \item \textbf{ESC current margin:} the current per motor decreases as the diameter increases, so no review of the sizing is needed.
+\end{itemize}
+
+\subsection{First test with 8-inch propellers (20 October)}
+\label{subsec:propulsor-8in}
+
+The first test with the 8-inch propellers ended in two aborted arms. In both, the pattern was the same: Loiter mode, take-off ramp with motor output of 43--55~\%, 25--31~A, voltage above 23.85~V, and the \emph{log} ends between 0.1 and 0.5~s later, with no \emph{failsafe} or error recorded.
+
+The controller stays calm and the four motors are symmetric (within $\pm 2$~\%). The vibration, however, is much higher than in the previous flights: 15--35~m/s\textsuperscript{2} in the first arm and 32--92~m/s\textsuperscript{2} (with \emph{clipping}) in the second, against a median of 3--5~m/s\textsuperscript{2} and a maximum of $\sim$16~m/s\textsuperscript{2} in the previous flights. The raw IMU shows a tonal vibration --~narrow peaks at the rotation frequency, which grow with acceleration (127--134~Hz $\rightarrow$ 159--173~Hz)~-- and not a broadband one, which points to propeller imbalance (1$\times$ component) rather than rubbing. The parameters and filters were not touched for the propeller change. The exact cause of the \emph{log} cut has not been determined; the working hypothesis is propeller imbalance, which must be ruled out by balancing them before repeating the test.
+
+\subsection{Control retuning}
+\label{subsec:propulsor-control}
+
+The change of diameter modifies the rotational inertia and the control authority, so the angular-rate loop gains stop being valid. After mounting it is necessary to:
+
+\begin{enumerate}[label=\arabic*.]
+    \item \textbf{Redo the harmonic \emph{notch} filter.} The fundamental frequency of the motors drops as the diameter increases. Procedure: \texttt{INS\_RAW\_LOG\_OPT = 9}, a 60--90~s flight with varied manoeuvres, analysis with ArduPilot's \emph{Filter Review} tool.
+    \item \textbf{Reduce the P and D gains} of the \emph{roll} and \emph{pitch} axes as a conservative starting point, and run \textbf{Autotune} axis by axis once the flight is verified to be stable.
+\end{enumerate}
+
+\subsection{Measurement protocol}
+\label{subsec:propulsor-mesura}
+
+To quantify the real gain, a controlled comparison protocol is established. \textbf{Prerequisite: calibration of the current and voltage sensor} (\texttt{BATT\_AMP\_PERVLT}, \texttt{BATT\_VOLT\_MULT}), without which the energy measurements are not valid. This requirement is already met (\cref{tab:canvis-seguretat}).
+
+\textbf{Identical conditions between tests:} same grid, height, cruise speed, payload, battery mass and wind conditions ($< 3$~m/s).
+
+\textbf{Variables to record in each test:}
+
+\begin{table}[H]
+    \centering
+    \caption{Variables to record per test}
+    \label{tab:variables-mesura}
+    \begin{tabular}{ll}
+        \toprule
+        Variable & Source \\
+        \midrule
+        Energy consumed (mAh) & \texttt{BAT.CurrTot} in the log \\
+        Armed time (s) & \texttt{ARMED} / \texttt{DISARMED} marks \\
+        Average consumption (A) & \texttt{BAT.Curr} \\
+        Average power (W) & \texttt{BAT.Curr} $\times$ \texttt{BAT.Volt} \\
+        Efficiency (g/W) & AUW $\div$ average power \\
+        \texttt{MOT\_THST\_HOVER} & parameter learned in flight \\
+        Area covered (ha) & mission planning \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Derived metrics:} mAh per minute, \textbf{hectares per battery} (the relevant quantity for the operator) and g/W (the relevant quantity for engineering).
+
+\begin{table}[H]
+    \centering
+    \caption{Propulsion group comparison: initial configuration (measured in flight test 6, flight 2) and 8-inch propellers (pending)}
+    \label{tab:resultats-propulsor}
+    \begin{tabular}{lccc}
+        \toprule
+        Metric & 7 $\times$ 4 $\times$ 3 (initial) & 8 $\times$ 4.2 $\times$ 3 & Change \\
+        \midrule
+        Energy until \emph{failsafe} (mAh) & 2,012 & pending & \\
+        Time until \emph{failsafe} (min) & 10.6 & pending & \\
+        Average consumption (A) & 22 & pending & \\
+        Average power (W) & $\approx 500$ & pending & \\
+        Efficiency (g/W) & $\approx 4.4$ & pending & \\
+        \texttt{MOT\_THST\_HOVER} & 0.23 & pending & \\
+        Hectares per battery at 50~m & 3.1 & pending & \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\noindent\textit{Prior estimate: $+12$--$18$~\% endurance.}
+
+\smallskip
+\noindent The values in the initial column come from flight 2 of flight test 6 (\cref{sec:vol6}), measured with the current sensor already calibrated. The power is the product of the average current and an average voltage of $\sim$22.5~V. Both flights of test 6 end by low-battery \emph{failsafe} when only 47--50~\% of the nominal capacity has been used, because of the voltage drop under load (\cref{sec:vol6}): the usable endurance is limited by voltage, not by energy.
+
+\subsection{Line of continuity}
+\label{subsec:propulsor-continuitat}
+
+The 8-inch configuration exhausts the margin available with the current motors. Making full use of the 500~mm \emph{frame} requires replacing the motor group:
+
+\begin{table}[H]
+    \centering
+    \caption{Propulsion group configurations and estimated endurance}
+    \label{tab:continuitat-propulsor}
+    \small
+    \begin{tabular}{lccc}
+        \toprule
+        Configuration & Disc loading & Theoretical $P_i$ & Estimated endurance \\
+        \midrule
+        7 inches (initial) & 22.2~kg/m\textsuperscript{2} & 203~W & 10--11~min \\
+        8 inches & 17.0~kg/m\textsuperscript{2} & 178~W & 12--13~min \\
+        \textbf{12--13 inches, 450--500~KV motors} & \textbf{6.4~kg/m\textsuperscript{2}} & \textbf{109~W} & \textbf{18--22~min} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Candidates: Sunnysky X3108 480~KV or T-Motor MN3110 470~KV with 12 $\times$ 4 or 13 $\times$ 4.4 propellers. The resulting thrust-to-weight ratio ($\sim$2.6:1) remains adequate for mapping operation. The arm mounting pattern must be verified: 28xx-series motors usually mount with a 16 $\times$ 16~mm pattern and 31xx with 19 $\times$ 19 or 25 $\times$ 25~mm.
+
+Combined with a \textbf{6S2P Li-ion} \emph{pack} of high-discharge cells (Molicel P42A or P45B, 206~Wh/kg versus the 143~Wh/kg of the current LiPo; \cref{subsec:autonomia-liion}), the projected endurance exceeds 30~minutes.
+
+\subsection{Conclusion}
+
+The initial 7-inch configuration was a decision to make use of material at hand, adequate for the commissioning phase but suboptimal once the system became operational. The later analysis identifies the propeller diameter as the limiting factor of efficiency and establishes two improvements of very different cost:
+
+\begin{itemize}
+    \item \textbf{Change to 8-inch propellers} ($\sim$€15): uses the margin that the current motors allow.
+    \item \textbf{Change of motor group to 12--13~inches} ($\sim$€140): uses the existing \emph{frame} and almost doubles the endurance.
+\end{itemize}
+
+Neither requires modifying the RTK architecture, the photographic chain or the flight software, which remain intact.
+
+
+\section{Status and pending work}
+\label{sec:pendents-proves-vol}
+
+\subsection{Resolved during the campaign}
+\begin{itemize}
+    \item Stable control and \emph{moving baseline} with RTK Fixed at 100~\% on both receivers. Vibration, measured in the log (\texttt{VIBE} message) with the motors running, has a median of 2--5~m/s\textsuperscript{2} and a maximum of 10.8~m/s\textsuperscript{2} in flight test 5 and 18.7~m/s\textsuperscript{2} in 6, with no \emph{clipping} (\cref{tab:progressio}).
+    \item Current and voltage sensor calibrated (\texttt{BATT\_AMP\_PERVLT}, \texttt{BATT\_VOLT\_MULT}); the current sensor read below the real value, which hid the real consumption until the battery collapse of 4 September.
+    \item Camera trigger chain operational: IS-T trigger, hot-shoe \emph{feedback} on pin 55 (110 of 110 exposures confirmed in flight 2 of test 6) and \emph{grid} planned with the real 25~mm focal length.
+    \item Lateral \emph{baseline} with GPS1 on the left (\texttt{GPS1\_POS\_Y=$-0.19$}), with valid GNSS \emph{yaw}.
+\end{itemize}
+
+\subsection{Pending: tests and improvements}
+\begin{itemize}
+    \item Harmonic \emph{notch}: measure the frequency with FFT in \emph{hover} and configure it in mode 3 (ESC RPM); the \emph{IMU batch sampler} is already active (\texttt{INS\_LOG\_BAT\_MASK=1}). Verify \texttt{SERVO\_BLH\_POLES=14} against the real RPM, because the \emph{notch} depends on it. Autotune afterwards.
+    \item 6S2P Li-ion battery and, if more endurance is needed, change of motor group (\cref{sec:autonomia}).
+    \item Ground control and check points, measured with the same base and session as the flight, to state a precision (\cref{sec:gcp}).
+    \item Compute by PPP the offset of the first session with a base log (the service already saves the stream and the \emph{survey-in} position of every session, \cref{sec:protocol-camp}) and check that the conversion to RINEX works (\cref{subsec:efecte-surveyin}).
+    \item Repeat the field flight (flight test 6) with the sun more than 10--15$^{\circ}$ above the horizon (\cref{sec:vol6}).
+    \item Precision test plan T1--T6 (\cref{tab:validacio}), with the GNSS \emph{heading} and the accuracy of the RTK baseline; application of PPK (\cref{sec:processament}).
+\end{itemize}

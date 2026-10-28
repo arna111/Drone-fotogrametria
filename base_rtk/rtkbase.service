@@ -1,0 +1,14 @@
+[Unit]
+Description=RTK base station str2str RTCM3 server (TCP :5000 + registre a fitxer per sessions)
+After=network.target
+
+[Service]
+Type=simple
+User=arnau
+ExecStartPre=/usr/local/bin/rtkbase nova-sessio
+ExecStart=/usr/local/bin/str2str -in serial://ttyACM0:115200 -out tcpsvr://:5000 -out file:///home/arnau/logs/actual/base_%%Y%%m%%d_%%h%%M.rtcm3::S=1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

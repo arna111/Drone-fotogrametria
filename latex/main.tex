@@ -1,0 +1,142 @@
+\documentclass[11pt,a4paper,openany]{book}
+
+% ---------- Idioma i codificació ----------
+\usepackage[catalan]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+% Punt volat de la l·l catalana: sense l'espai lateral que li dona el glif per defecte
+\DeclareUnicodeCharacter{00B7}{\kern-.15em\textperiodcentered\kern-.15em}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------- Paquets generals ----------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+% Columna de paràgraf alineada a l'esquerra: evita els buits entre paraules de la justificació en columnes estretes
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.1}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
+\usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\addbibresource{bib/referencies.bib}
+\usepackage{cleveref} % ha d'anar després de hyperref
+\AtBeginDocument{%
+    \renewcommand{\crefpairconjunction}{ i }%
+    \renewcommand{\crefmiddleconjunction}{, }%
+    \renewcommand{\creflastconjunction}{ i }%
+}
+\crefname{chapter}{capítol}{capítols}
+\Crefname{chapter}{Capítol}{Capítols}
+\crefname{section}{secció}{seccions}
+\Crefname{section}{Secció}{Seccions}
+\crefname{subsection}{secció}{seccions}
+\Crefname{subsection}{Secció}{Seccions}
+\crefname{table}{taula}{taules}
+\Crefname{table}{Taula}{Taules}
+\crefname{figure}{figura}{figures}
+\Crefname{figure}{Figura}{Figures}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    citecolor=blue!50!black,
+    urlcolor=blue!50!black,
+    pdftitle={Sistema d'aerofotogrametria de precisió amb base RTK pròpia},
+    pdfauthor={Arnau Mariegas}
+}
+
+% Marcador visible de feina pendent o informació que falta
+\newcommand{\pendent}[1]{\par\medskip\noindent\fcolorbox{orange!60!black}{orange!8}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\small\textbf{Pendent.} #1}}\par\medskip}
+
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[RE]{\leftmark}
+\fancyhead[LO]{\rightmark}
+\renewcommand{\headrulewidth}{0.4pt}
+\captionsetup{font=small, labelfont=bf}
+
+% Espaiat uniforme de les llistes (sense glue elàstica) i pàgines sense estirar verticalment
+\raggedbottom
+\setlength{\emergencystretch}{2em}
+\setlist{itemsep=0.4em, parsep=0pt, topsep=0.5em, partopsep=0pt}
+
+% ---------- Dades del document ----------
+\title{Sistema d'aerofotogrametria de precisió\\amb base RTK pròpia}
+\author{Arnau Mariegas}
+\date{Octubre de 2026}
+
+\begin{document}
+
+\frontmatter
+
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+    {\Huge\bfseries Sistema d'aerofotogrametria\\de precisió amb base RTK pròpia\par}
+    \vspace{1cm}
+    {\Large Disseny, construcció i validació en vol d'un sistema UAV\\amb posicionament GNSS centimètric\par}
+    \vspace{2.5cm}
+    {\Large Arnau Mariegas\par}
+    \vspace{0.6cm}
+    {\large Octubre de 2026\par}
+    \vfill
+    \includegraphics[width=0.75\textwidth]{img/xasis_sencer.jpg}
+\end{titlepage}
+
+\chapter*{Resum}
+\addcontentsline{toc}{chapter}{Resum}
+
+Aquest document descriu el disseny, la construcció i la posada a punt d'un sistema d'aerofotogrametria de precisió format per tres subsistemes: una base GNSS RTK pròpia, un UAV amb doble receptor GNSS en \emph{moving baseline} i una càmera amb sincronisme de sabata, i una estació de terra que els enllaça. L'objectiu és el geoetiquetat centimètric de les fotografies aèries per generar ortomosaics i models digitals de superfície, amb un cost de maquinari d'uns 2.150~€ i control total sobre el \emph{firmware}, les correccions i el flux de dades.
+
+Els resultats principals són:
+\begin{itemize}
+    \item Una arquitectura que serveix les correccions RTCM3 per WiFi local i les reenvia al dron per un enllaç de telemetria de llarg abast, i que obté RTK Fixed al 100~\% del vol als dos receptors, amb \emph{yaw} derivat del GNSS i sense brúixola magnètica.
+    \item Una campanya de proves de vol que va resoldre, a partir de l'anàlisi dels registres, oscil·lacions de control, una fallada de configuració del \emph{moving baseline}, el col·lapse d'una bateria i els problemes de disparament de la càmera (\cref{chap:proves-vol}).
+    \item Dos vols de fotogrametria processats de punta a punta: 118 fotografies reconstruïdes a 30~m, amb un GSD de 0,45~cm/px i un error de reprojecció de 0,90~px, i 110 a 50~m (\cref{chap:vols-prova}).
+    \item La mesura, per dos mètodes independents, d'un retard efectiu de l'obturador de 0,27--0,28~s ($\sim$1,3~m a 5~m/s), que justifica el \emph{feedback} de sabata i es compensa al geoetiquetat.
+    \item Una anàlisi del grup propulsor que identifica el diàmetre d'hèlix com a factor limitant de l'autonomia i en quantifica el marge de millora (\cref{sec:propulsor}).
+\end{itemize}
+
+La precisió del producte final encara no s'ha pogut afirmar: requereix punts de control i de comprovació a terra mesurats amb la mateixa base que el vol, previstos al pla de proves de precisió (\cref{sec:validacio}). Com que la base fa un \emph{survey-in} a cada sessió, la posició absoluta del mapa té un desplaçament de l'ordre de metres que només es pot corregir amb el registre de la base. El document marca amb un requadre \emph{Pendent} la documentació i les proves que encara falten, i la llista consolidada de tasques és a \cref{sec:pendents-proves-vol}.
+
+\tableofcontents
+
+\mainmatter
+
+% =====================================================
+% PART I — DISSENY I CONSTRUCCIÓ
+% =====================================================
+\part{Disseny i construcció}
+\input{parts/01_construccio/construccio.tex}
+\input{parts/01_construccio/manual.tex}
+
+% =====================================================
+% PART II — PROVES DE VOL
+% =====================================================
+\part{Proves de vol i posada a punt}
+\input{parts/02_proves_vol/proves_vol.tex}
+
+% =====================================================
+% PART III — VOLS DE FOTOGRAMETRIA
+% =====================================================
+\part{Resultats fotogramètrics}
+\input{parts/03_vols/vols_prova.tex}
+
+\backmatter
+\printbibliography[title={Referències}]
+
+\end{document}

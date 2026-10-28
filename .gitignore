@@ -1,0 +1,33 @@
+# Dades de vol: es queden en local (pesades i amb coordenades GPS)
+test_*/fotos_*/
+test_*/entrades/*.bin
+test_*/georef/
+test_*/processats/*/resultats/
+test_*/processats/*/report_odx/
+test_*/processats/*/proces/*
+!test_*/processats/*/proces/options.json
+!test_*/processats/*/proces/comanda_execucio.bat
+
+# Programari de tercers (s'instal·la a part, vegeu el README)
+test_*/eines/exiftool/
+
+# Compilació de LaTeX
+latex/*.aux
+latex/*.bbl
+latex/*.bbl-SAVE-ERROR
+latex/*.bcf
+latex/*.bcf-SAVE-ERROR
+latex/*.blg
+latex/*.fdb_latexmk
+latex/*.fls
+latex/*.log
+latex/*.out
+latex/*.run.xml
+latex/*.toc
+latex/*.synctex*
+latex/img/diagrama_connexions.aux
+latex/img/diagrama_connexions.log
+
+# Altres
+__pycache__/
+*.pyc

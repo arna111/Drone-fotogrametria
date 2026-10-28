@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""Gestio dels registres i del survey-in de la base RTK (s'executa a la Pi).
+
+Cada arrencada del servei rtkbase obre una sessio nova: /home/arnau/logs/sNNNN/.
+El servei escriu alla fitxers horaris base_AAAAMMDD_HHMM.rtcm3 (hora UTC de la Pi,
+que no te RTC i pot anar desfasada).
+"""
+import argparse
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+LOGS = "/home/arnau/logs"
+ACTUAL = os.path.join(LOGS, "actual")
+CONTINUA = os.path.join(LOGS, ".continua")
+DEV = "/dev/ttyACM0"
+SERVEI = "rtkbase"
+PROTVER = "27.50"
+FITXER = re.compile(r"^base_(\d{8})_(\d{4})\.rtcm3$")
+
+
+def sessions():
+    """Llista de (numero, carpeta) ordenada."""
+    trobades = []
+    for nom in os.listdir(LOGS):
+        m = re.fullmatch(r"s(\d{4})", nom)
+        if m and os.path.isdir(os.path.join(LOGS, nom)):
+            trobades.append((int(m.group(1)), os.path.join(LOGS, nom)))
+    return sorted(trobades)
+
+
+def fitxers(carpeta):
+    """Fitxers de registre d'una sessio en ordre cronologic."""
+    noms = [n for n in os.listdir(carpeta) if FITXER.match(n)]
+    camins = [os.path.join(carpeta, n) for n in noms]
+    return sorted(camins, key=lambda p: (os.path.getmtime(p), p))
+
+
+def activa():
+    """Numero de la sessio on escriu ara el servei, o None si esta aturat."""
+    if subprocess.run(["systemctl", "is-active", "--quiet", SERVEI]).returncode:
+        return None
+    try:
+        m = re.fullmatch(r"s(\d{4})", os.readlink(ACTUAL))
+    except OSError:
+        return None
+    return int(m.group(1)) if m else None
+
+
+def resol(text):
+    llista = sessions()
+    if not llista:
+        sys.exit("No hi ha cap sessio.")
+    n = llista[-1][0] if text == "ultima" else int(text)
+    for num, carpeta in llista:
+        if num == n:
+            return num, carpeta
+    sys.exit("La sessio %d no existeix." % n)
+
+
+def mida_mb(bytes_):
+    return "%.1f MB" % (bytes_ / 1e6)
+
+
+def utc(ts):
+    return time.strftime("%Y-%m-%d %H:%M", time.gmtime(ts))
+
+
+def nova_sessio(_):
+    os.makedirs(LOGS, exist_ok=True)
+    if os.path.exists(CONTINUA):  # reinici fet per 'survey': mateixa sessio
+        os.remove(CONTINUA)
+        if os.path.isdir(ACTUAL):
+            return
+    llista = sessions()
+    nom = "s%04d" % ((llista[-1][0] + 1) if llista else 1)
+    os.mkdir(os.path.join(LOGS, nom))
+    os.symlink(nom, ACTUAL + ".tmp")
+    os.replace(ACTUAL + ".tmp", ACTUAL)
+
+
+def llista(_):
+    act = activa()
+    print("%-7s %7s %9s  %-16s  %-16s  %s" % ("Sessio", "Fitxers", "Mida", "Inici (UTC Pi)", "Fi (UTC Pi)", "Survey"))
+    for n, carpeta in sessions():
+        arxius = fitxers(carpeta)
+        mida = sum(os.path.getsize(p) for p in arxius)
+        m = FITXER.match(os.path.basename(arxius[0])) if arxius else None
+        inici = "%s-%s-%s %s:%s" % (m.group(1)[:4], m.group(1)[4:6], m.group(1)[6:], m.group(2)[:2], m.group(2)[2:]) if m else "-"
+        fi = utc(os.path.getmtime(arxius[-1])) if arxius else "-"
+        survey = "si" if os.path.exists(os.path.join(carpeta, "survey.txt")) else "-"
+        marca = " (activa)" if n == act else ""
+        print("s%04d   %7d %9s  %-16s  %-16s  %s%s" % (n, len(arxius), mida_mb(mida), inici, fi, survey, marca))
+
+
+def uneix(args):
+    if sys.stdout.isatty():
+        sys.exit("Redirigeix la sortida a un fitxer: rtkbase uneix %s > fitxer.rtcm3" % args.sessio)
+    _, carpeta = resol(args.sessio)
+    for p in fitxers(carpeta):
+        with open(p, "rb") as f:
+            shutil.copyfileobj(f, sys.stdout.buffer)
+
+
+def mida(args):
+    n, carpeta = resol(args.sessio)
+    print("%04d %d" % (n, sum(os.path.getsize(p) for p in fitxers(carpeta))))
+
+
+def info(args):
+    _, carpeta = resol(args.sessio)
+    p = os.path.join(carpeta, "survey.txt")
+    if os.path.exists(p):
+        sys.stdout.write(open(p).read())
+
+
+def esborra(args):
+    llista_ = sessions()
+    if args.abans is not None:
+        objectiu = [s for s in llista_ if s[0] < args.abans]
+    else:
+        demanades = {int(x) for x in args.sessions}
+        objectiu = [s for s in llista_ if s[0] in demanades]
+        if len(objectiu) != len(demanades):
+            sys.exit("Alguna de les sessions demanades no existeix.")
+    if activa() in [n for n, _ in objectiu]:
+        sys.exit("La sessio %d es l'activa; no s'esborra." % activa())
+    if not objectiu:
+        print("No hi ha res a esborrar.")
+        return
+    total = 0
+    for n, carpeta in objectiu:
+        mida = sum(os.path.getsize(p) for p in fitxers(carpeta))
+        total += mida
+        print("  s%04d  %s" % (n, mida_mb(mida)))
+    if not args.y:
+        if not sys.stdin.isatty():
+            sys.exit("Cal confirmar: executa-ho en un terminal o afegeix -y.")
+        if input("Esborrar %d sessions (%s)? [s/N] " % (len(objectiu), mida_mb(total))).strip().lower() != "s":
+            print("Cancel-lat.")
+            return
+    for _, carpeta in objectiu:
+        shutil.rmtree(carpeta)
+    print("Esborrades %d sessions." % len(objectiu))
+
+
+def servei(accio):
+    r = subprocess.run(["sudo", "-n", "systemctl", accio, SERVEI])
+    if r.returncode:
+        sys.exit("No s'ha pogut fer systemctl %s %s." % (accio, SERVEI))
+
+
+def ubx(*args):
+    r = subprocess.run(["ubxtool", "-f", DEV, "-P", PROTVER, *args], capture_output=True, text=True, timeout=30)
+    return r.stdout
+
+
+def llegeix_svin():
+    """Una lectura de NAV-SVIN o None si el receptor no respon."""
+    sortida = ubx("-p", "NAV-SVIN", "-w", "3")
+    if "UBX-NAV-SVIN:" not in sortida:
+        return None
+    bloc = sortida.split("UBX-NAV-SVIN:")[1].split("UBX-")[0]
+
+    def v(clau):
+        return int(re.search(r"\b%s (-?\d+)" % clau, bloc).group(1))
+
+    return {
+        "dur": v("dur"), "obs": v("obs"), "valid": v("valid"), "active": v("active"),
+        "acc": v("meanAcc") / 1e4,
+        "pos": [(v("mean" + e) + v("mean" + e + "HP") * 0.01) / 100 for e in "XYZ"],
+    }
+
+
+def survey(args):
+    # Si es talla la sessio SSH, que el servei es torni a engegar igualment.
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
+    servei("stop")  # str2str ocupa el port; ubxtool no rep resposta mentre corre
+    open(CONTINUA, "w").close()
+    resultat = None
+    try:
+        if not args.estat:
+            print("Reiniciant el survey-in...")
+            ubx("-z", "CFG-TMODE-MODE,0")
+            time.sleep(1)
+            ubx("-z", "CFG-TMODE-MODE,1")
+        limit = time.time() + args.minuts * 60
+        while True:
+            s = llegeix_svin()
+            if s is None:
+                print("  el receptor no respon")
+            else:
+                print("  %5d s  obs %6d  error mitja %8.3f m  valid %d" % (s["dur"], s["obs"], s["acc"], s["valid"]))
+                if s["valid"]:
+                    resultat = s
+                    break
+            if args.estat or time.time() > limit:
+                break
+            time.sleep(2)
+    except KeyboardInterrupt:
+        print("Interromput.")
+    finally:
+        servei("start")
+    if resultat:
+        with open(os.path.join(ACTUAL, "survey.txt"), "w") as f:
+            f.write("survey-in valid; hora UTC de la Pi %s\n" % time.strftime("%Y-%m-%d %H:%M", time.gmtime()))
+            f.write("ECEF_m %.4f %.4f %.4f\n" % tuple(resultat["pos"]))
+            f.write("meanAcc_m %.3f\ndur_s %d\nobs %d\n" % (resultat["acc"], resultat["dur"], resultat["obs"]))
+        print("Survey-in valid. Posicio ECEF (m): %.4f %.4f %.4f  (anotada a la sessio activa)" % tuple(resultat["pos"]))
+    elif not args.estat:
+        print("Sense survey-in valid. El receptor segueix amb ell en marxa; 'survey --estat' el consulta sense reiniciar-lo.")
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = p.add_subparsers(dest="ordre", required=True)
+    sub.add_parser("nova-sessio", help="(intern) obre la sessio nova en arrencar el servei").set_defaults(f=nova_sessio)
+    sub.add_parser("llista", help="llista les sessions").set_defaults(f=llista)
+    for nom, f, ajuda in (("uneix", uneix, "escriu els fitxers d'una sessio units, a stdout"),
+                          ("mida", mida, "numero i bytes d'una sessio"),
+                          ("info", info, "notes del survey-in d'una sessio")):
+        s = sub.add_parser(nom, help=ajuda)
+        s.add_argument("sessio", help="numero o 'ultima'")
+        s.set_defaults(f=f)
+    s = sub.add_parser("esborra", help="esborra sessions (mai l'activa)")
+    s.add_argument("sessions", nargs="*", help="numeros de sessio")
+    s.add_argument("--abans", type=int, help="esborra totes les anteriors a aquest numero")
+    s.add_argument("-y", action="store_true", help="no demanis confirmacio")
+    s.set_defaults(f=esborra)
+    s = sub.add_parser("survey", help="reinicia el survey-in i espera que sigui valid")
+    s.add_argument("--minuts", type=float, default=20, help="temps maxim d'espera (per defecte 20)")
+    s.add_argument("--estat", action="store_true", help="nomes consulta, sense reiniciar-lo")
+    s.set_defaults(f=survey)
+    args = p.parse_args()
+    if args.ordre == "esborra" and bool(args.sessions) == (args.abans is not None):
+        p.error("indica numeros de sessio o be --abans N")
+    args.f(args)
+
+
+if __name__ == "__main__":
+    main()

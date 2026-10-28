@@ -1,0 +1,446 @@
+\chapter{Operation manual and procedures}
+\label{chap:manual}
+
+This chapter collects the reference configuration of the system and the working procedure, applicable to any photogrammetry flight. The results obtained with these procedures are presented in \cref{chap:vols-prova}.
+
+\section{GNSS antennas}
+\label{sec:antenes-gnss}
+
+\subsection{Drone helical antennas}
+
+The two helical antennas of the \emph{rover} are mounted:
+\begin{itemize}
+    \item Vertical, parallel to each other, pointing up.
+    \item At the highest point of the drone.
+    \item With a minimum separation of 10~cm from the VTx, the ESCs and the power cables, to avoid interference.
+    \item Without tilt with respect to the vertical axis.
+\end{itemize}
+
+\subsection{\emph{Moving baseline} baseline}
+
+The separation between the two helical antennas is \textbf{0.38~m}, on a rigid carbon \emph{bracket} aligned with the Y (lateral) axis of the drone. The \emph{offsets} with respect to the centre of gravity are $Y = \mp 0.19$~m and $Z = -0.10$~m (GPS1 on the left, GPS2 on the right), with $X = 0$ (\cref{tab:params-gps-mb}).
+
+The \emph{heading} precision of a \emph{moving baseline} scales inversely with the baseline length: with 0.38~m a $\sigma$ of the order of $0.5^{\circ}$ is estimated, which must be validated empirically (\cref{sec:validacio}). Any change in the length of the \emph{bracket} requires recalibrating the GNSS \emph{heading}.
+
+\subsection{Base antenna}
+
+Horizontal \emph{patch} antenna with a ground plane, levelled on the survey tripod.
+
+\subsection{Camera timing}
+
+The central pin of the camera \emph{hot shoe} is the \textbf{X-sync} signal: the Seagull SYNC2 fits directly onto it, since the Sony $\alpha$6000 has a \emph{Multi Interface Shoe} compatible with the ISO~518 standard.
+
+\section{FC serial port configuration (Kakute H7)}
+\label{sec:ports-serie}
+
+\begin{table}[H]
+    \centering
+    \caption{Serial port assignment of the Kakute H7}
+    \label{tab:ports-serie}
+    \begin{tabular}{lllc}
+        \toprule
+        Port & Function & Baud rate & Protocol \\
+        \midrule
+        SERIAL0 (USB) & MAVLink2 (configuration) & -- & -- \\
+        SERIAL1 (UART1, VTX port) & RFD868x MAVLink & 57600 & 2 \\
+        SERIAL2 (UART2) & Internal Bluetooth (occupied) & -- & Disabled \\
+        SERIAL3 (UART3) & F9P \#1 -- GPS1 (MB-Base) & 230400 & 5 \\
+        SERIAL4 (UART4) & F9P \#2 -- GPS2 (MB-Rover) & 230400 & 5 \\
+        SERIAL6 (UART6) & RC ELRS (CRSF) & 420000 & 23 \\
+        SERIAL7 (UART7, ESC port) & ESC telemetry & 115200 & 16 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Camera configuration}
+\label{sec:config-camera}
+
+\subsection{Controller parameters}
+
+From ArduPilot 4.5 on, the camera parameters have the prefix \texttt{CAM1\_*} to support multiple cameras; the old documentation and forums still use \texttt{CAM\_*} names.
+
+\begin{table}[H]
+    \centering
+    \caption{Camera parameters (ArduPilot 4.5 or later)}
+    \label{tab:params-camera}
+    \begin{tabular}{lP{9.5cm}}
+        \toprule
+        Parameter & Value / Function \\
+        \midrule
+        \texttt{SERVO5\_FUNCTION} & 10 (\emph{CameraTrigger}, MAP2 on pad M5) \\
+        \texttt{CAM1\_TYPE} & 1 (Servo) \\
+        \texttt{CAM1\_DURATION} & 1.0 (in \textbf{seconds}, not ms): the MAP2 in IS-T mode needs commands of 1~s \\
+        \texttt{CAM1\_SERVO\_ON} & 1700 (IS-T mode) \\
+        \texttt{CAM1\_SERVO\_OFF} & 1500 (inside the MAP2 rest range, 1400--1600) \\
+        \texttt{SERVO5\_TRIM} & 1500 \\
+        \texttt{CAM1\_TRIGG\_DIST} & 0 in the base configuration; set for each mission (\cref{sec:planificacio-vol}) \\
+        \texttt{SERVO6\_FUNCTION} & $-1$ (GPIO for the SYNC2 \emph{feedback}, pad M6) \\
+        \texttt{CAM1\_FEEDBAK\_PIN} & 55 \\
+        \texttt{CAM1\_FEEDBAK\_POL} & 1 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The parameter name is \texttt{CAM1\_FEEDBAK\_PIN}, spelled \textbf{without the ``C''} of \emph{feedback} (historical ArduPilot naming). Pin 55 corresponds to the \texttt{SERVO6} pad reassigned as GPIO.
+
+With a manual lens without electronic contacts, the MAP2 must not work in AF-T mode (useless 1~s pre-focus, which adds a constant delay). The diagnosis is detailed in \cref{subsec:problemes-camera}.
+
+\subsection{Camera settings}
+\label{subsec:ajust-camera}
+
+\begin{table}[H]
+    \centering
+    \caption{Sony $\alpha$6000 settings for photogrammetry}
+    \label{tab:ajust-camera}
+    \begin{tabular}{ll}
+        \toprule
+        Setting & Value \\
+        \midrule
+        Exposure mode & M (manual) \\
+        Shutter speed & 1/1600~s \\
+        Aperture & f/5.6 (ring fixed with tape) \\
+        Focus & Manual at infinity (both rings fixed with tape) \\
+        ISO & Auto, with a ceiling at 1600 \\
+        Drive mode & \emph{Single shot}, JPEG Fine \\
+        Shutter & Electronic front curtain enabled \\
+        \emph{Release w/o Lens} & Enabled (needed with a lens without contacts) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The manual lens does not send data to the camera: the EXIF records \texttt{FocalLength=0} and an empty \texttt{LensModel}, and the orientation would depend on the heading (\cref{sec:processament-fotos}). This metadata is rewritten in post-processing.
+
+The camera has no dynamic range to compensate for low light: photographs must be taken with the sun more than 10--15$^{\circ}$ above the horizon (\cref{sec:vol6}).
+
+\subsection{Shutter delay}
+
+The controller trigger command (\texttt{TRIG}) and the actual exposure are separated by $\approx 0.28$~s (\cref{sec:retard-obturador}); at 5~m/s that is $\approx 1.4$~m. For this reason the geotagging uses the position of the \texttt{CAM} message (instant of the hot-shoe \emph{feedback}) when it is available, and compensates with $v\cdot\tau$ when it is not.
+
+\section{\emph{Moving baseline} GPS and \emph{yaw} configuration}
+\label{subsec:gps-moving-baseline}
+
+\begin{table}[H]
+    \centering
+    \caption{\emph{Moving baseline} and GPS-for-yaw parameters}
+    \label{tab:params-gps-mb}
+    \begin{tabular}{ll}
+        \toprule
+        Parameter & Value \\
+        \midrule
+        \texttt{GPS1\_TYPE} & 17 (MB-Base) \\
+        \texttt{GPS2\_TYPE} & 18 (MB-Rover) \\
+        \texttt{GPS\_AUTO\_CONFIG} & 1 \\
+        \texttt{GPS\_DRV\_OPTIONS} & 0 \\
+        \texttt{GPS\_INJECT\_TO} & 127 \\
+        \texttt{EK3\_SRC1\_POSXY} / \texttt{VELXY} & 3 (GPS) \\
+        \texttt{EK3\_SRC1\_YAW} & 2 (GPS yaw) \\
+        \texttt{COMPASS\_ENABLE} & 0 (no compass) \\
+        \texttt{GPS1\_POS\_X/Y/Z} & $0$ / $-0.19$ / $-0.10$~m \\
+        \texttt{GPS2\_POS\_X/Y/Z} & $0$ / $+0.19$ / $-0.10$~m \\
+        \texttt{GPS1\_MB\_OFS\_Y} & $-0.38$~m \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\texttt{GPS\_DRV\_OPTIONS} must be 0: the value 1 (use of UART2 for the \emph{moving baseline}) assumes a direct cable between the UART2 ports of the two F9Ps to carry the RTCM stream, which does not exist in this build; with the bit set, the \emph{rover} never reaches RTK Fixed (\texttt{PreArm: GPS[2] yaw not available}). The stream between receivers goes through the flight controller.
+
+\section{Control, battery and safety}
+\label{sec:params-control}
+
+\begin{table}[H]
+    \centering
+    \caption{Control, battery and safety parameters of the reference configuration}
+    \label{tab:params-control}
+    \small
+    \begin{tabular}{ll}
+        \toprule
+        Parameter & Value \\
+        \midrule
+        \texttt{FRAME\_CLASS} & 1 (Quad) \\
+        \texttt{FRAME\_TYPE} & 1 (X) \\
+        \texttt{MOT\_PWM\_TYPE} & 5 (DShot300)~\cite{ardupilot_dshot} \\
+        \texttt{ATC\_RAT\_RLL\_P} / \texttt{ATC\_RAT\_PIT\_P} & 0.07 \\
+        \texttt{ATC\_RAT\_RLL\_I} / \texttt{ATC\_RAT\_PIT\_I} & 0.07 \\
+        \texttt{ATC\_RAT\_RLL\_D} / \texttt{ATC\_RAT\_PIT\_D} & 0.002 \\
+        \texttt{ATC\_RAT\_YAW\_P} & 0.10 \\
+        \texttt{ATC\_RAT\_YAW\_I} & 0.01 \\
+        \texttt{MOT\_THST\_EXPO} & 0.65 \\
+        \texttt{MOT\_SPIN\_ARM} & 0.04 \\
+        \texttt{MOT\_SPIN\_MIN} & 0.06 \\
+        \texttt{MOT\_THST\_HOVER} & 0.225 (learned in flight, \texttt{MOT\_HOVER\_LEARN=2}) \\
+        \texttt{BATT\_MONITOR} & 4 (analogue voltage and current) \\
+        \texttt{BATT\_VOLT\_MULT} & 10.82 (calibrated) \\
+        \texttt{BATT\_AMP\_PERVLT} & 87.73 (calibrated) \\
+        \texttt{BATT\_LOW\_VOLT} / \texttt{BATT\_FS\_LOW\_ACT} & 21.6~V / 2 (RTL) \\
+        \texttt{BATT\_CRT\_VOLT} / \texttt{BATT\_FS\_CRT\_ACT} & 20.4~V / 1 (Land) \\
+        \texttt{BATT\_FS\_VOLTSRC} & 0 (instantaneous voltage) \\
+        \texttt{FENCE\_ENABLE} / \texttt{FENCE\_TYPE} & 1 / 7 (altitude, circle and polygon) \\
+        \texttt{FENCE\_RADIUS} & 700~m \\
+        \texttt{FENCE\_ALT\_MAX} & 120~m \\
+        \texttt{WPNAV\_SPEED} & 500~cm/s (5~m/s) in automatic missions \\
+        \texttt{FLTMODE1} to \texttt{FLTMODE6} & Stabilize, AltHold, Loiter, Auto, Guided, RTL \\
+        \texttt{LOG\_BITMASK} & 196607 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Pre-flight checklist}
+\label{sec:checklist-prevol}
+
+\begin{enumerate}[label=\arabic*.]
+    \item Verify that both F9Ps (base and drone) report \texttt{RTK Fixed} before arming, with the correct \emph{fix} type on both receivers (not \texttt{RTK Float} or \texttt{3D Fix}).
+    \item Verify that the GNSS \emph{yaw} (\emph{moving baseline}) is valid and consistent with the real \emph{heading} (margin $< 1^{\circ}$).
+    \item Check the RFD868x GS$\leftrightarrow$drone link and the reception of RTCM corrections on the drone.
+    \item Check the battery level of the drone (voltage per cell) and of the base (UPS).
+    \item Check the SD card and the camera battery, and that the settings are those of \cref{tab:ajust-camera}.
+    \item Test the trigger with \emph{Trigger Camera Now} and confirm that \texttt{CAM} messages appear (SYNC2 \emph{feedback} active).
+    \item Review the assigned flight modes and that the \emph{geofence} is active (\cref{tab:params-control}).
+    \item Check in Mission Planner that the EKF3 is healthy (no position or velocity variance warnings), that the HDOP is low (recommended $< 1$ with RTK Fixed) and that there is no pending \emph{prearm} message.
+    \item Verify that \texttt{COMPASS\_ENABLE=0} and that there is no compass \emph{prearm error}.
+    \item Check the \emph{failsafes}: loss of RC, loss of telemetry, low and critical battery.
+    \item Check that the sun is more than 10--15$^{\circ}$ above the horizon and that the flight area and the airspace allow the flight (\cref{sec:normativa}).
+\end{enumerate}
+
+\section{Flight planning}
+\label{sec:planificacio-vol}
+
+\subsection{GSD calculation}
+
+The \emph{Ground Sample Distance} depends only on the flight height $H$, the sensor size, the focal length $f$ and the image resolution:
+\[
+\mathrm{GSD}\,\text{(cm/px)} = \frac{H\,\text{(m)} \times \text{sensor width (mm)} \times 100}{f\,\text{(mm)} \times \text{image width (px)}}
+\]
+
+With the Sony $\alpha$6000 (APS-C sensor of 23.5~$\times$~15.6~mm, 6000~$\times$~4000~px, pixel size $\approx 3.92$~\textmu m) and the 25~mm TTArtisan lens:
+\[
+\mathrm{GSD}\,\text{(cm/px)} \approx 0.0157 \times H\,\text{(m)}
+\]
+
+\begin{table}[H]
+    \centering
+    \caption{GSD and coverage per image as a function of height (Sony $\alpha$6000 + TTArtisan 25~mm)}
+    \label{tab:gsd-altura}
+    \begin{tabular}{ccc}
+        \toprule
+        Height (m) & GSD (cm/px) & Footprint (m, width $\times$ height) \\
+        \midrule
+        30 & 0.47 & 28.2 $\times$ 18.7 \\
+        50 & 0.78 & 47.0 $\times$ 31.2 \\
+        60 & 0.94 & 56.4 $\times$ 37.4 \\
+        80 & 1.25 & 75.2 $\times$ 49.9 \\
+        100 & 1.57 & 94.0 $\times$ 62.4 \\
+        120 & 1.88 & 112.8 $\times$ 74.9 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The values measured in the flight tests agree with this relation: taking into account the focal length calibrated by the processing (25.72~mm), a GSD of 0.451~cm/px corresponds to a height of 29.6~m (flight planned at 30~m), and a GSD of 0.743~cm/px to 48.9~m (flight planned at $\sim$50~m).
+
+\subsection{Flight parameters}
+
+\begin{table}[H]
+    \centering
+    \caption{Adopted and recommended flight parameters}
+    \label{tab:parametres-vol}
+    \begin{tabular}{lP{9cm}}
+        \toprule
+        Parameter & Value \\
+        \midrule
+        Flight height & According to the target GSD (\cref{tab:gsd-altura}); 30~m and 50~m in the flight tests \\
+        Front / side overlap & 75--77~\% / 65--69~\% in flight 5; 80~\% / 70~\% recommended with complex relief \\
+        Speed & 5~m/s (\texttt{WPNAV\_SPEED=500}); limited by \emph{motion blur}: $v_{\max} = \mathrm{GSD}/t_{\text{exposure}}$ \\
+        Triggering & By distance (\texttt{CAM1\_TRIGG\_DIST}), with the interval between photos greater than the 1~s of \texttt{CAM1\_DURATION} \\
+        Camera orientation & Long side of the sensor along the flight direction \\
+        Lighting & Sun more than 10--15$^{\circ}$ above the horizon \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The 80/70~\% overlap percentages are the usual default value in photogrammetry software for precision projects with well-textured terrain; they can be reduced with caution thanks to RTK geotagging, but insufficient overlap still limits the quality of the SfM \emph{matching}. Since \texttt{CAM1\_DURATION=1.0} sets a minimum interval of about 1~s between triggers, at 5~m/s the distance between photos must be at least 5~m (\cref{subsec:autonomia-altura}).
+
+\section{Field protocol}
+\label{sec:protocol-camp}
+
+\subsection{Positioning the base}
+\begin{enumerate}[label=\alph*)]
+    \item Tripod on a stable point with a clear 360$^{\circ}$ sky, away from walls, metal roofs and vehicles; measure the antenna height (122~cm in the flight tests).
+    \item Switch on the Pi and wait about 30~s for the \texttt{BaseRTK} network to appear; connect the GS to it.
+    \item Restart the \emph{survey-in} to erase the mean of the previous session and wait until it is valid, from the PC connected to \texttt{BaseRTK} and inside the \texttt{base\_rtk} folder: \texttt{python base\_rtk.py survey}. The command shows the duration, the observations and the mean error as it goes, and ends when the \emph{survey-in} is valid (minimum 300~s and mean error, \texttt{meanAcc}, of 2~m or better) or after 20~min (\texttt{--minuts N} changes the limit). While it lasts, the \texttt{rtkbase} service is stopped and port 5000 does not serve; it restarts by itself at the end, also if the SSH connection drops or Ctrl-C is pressed.
+    \item If it does not become valid, the mean stalls because of \emph{multipath} or sky obstruction: improve the antenna location, do not extend the wait. The receiver keeps the \emph{survey-in} running, and \texttt{python base\_rtk.py survey --estat} queries it without restarting it.
+    \item When the \emph{survey-in} is valid, the command automatically saves the ECEF position (\texttt{meanX/Y/Z}) and the final \texttt{meanAcc} to \texttt{survey.txt}, inside the active session on the Pi. It is the only record of the base position for that session, and it is downloaded with the log (see ``Session log'' below).
+\end{enumerate}
+
+While the \emph{survey-in} is not valid, the stream does not carry message 1005 (base position) and the drone cannot reach RTK Fixed. The base position is therefore that of the \emph{survey-in}, with an error of the order of metres that shifts the whole session (\cref{subsec:efecte-surveyin}). To state absolute positions it will be necessary to reuse a fixed position recorded at the same point, or to correct the offset of each session with a PPP solution from its observation log.
+
+\paragraph{Session log.} The \texttt{rtkbase} service saves the receiver stream to files while forwarding it on port 5000, for the whole session: \texttt{str2str} has two outputs, \texttt{tcpsvr://:5000} and \texttt{file:///home/arnau/logs/actual/base\_\%Y\%m\%d\_\%h\%M.rtcm3::S=1}. Each start of the service opens a new \emph{session}, a folder \texttt{/home/arnau/logs/sNNNN/} (\texttt{actual} points to the one in progress), and a file is created inside it every hour (\texttt{::S=1}). The file names carry the UTC time of the Pi, and the date is unreliable, because the Pi has no real-time clock or internet: the valid time is the GNSS time inside the data. A service restart or a power cut opens a new session, except for what \texttt{survey} does, which continues in the same one. The log is the same stream as the port, about 7~MB per hour, with the RTCM3 observations (pseudorange, phase and C/N0 of the four systems), message 1005 once the \emph{survey-in} is valid and the UBX navigation messages that the receiver emits on the same port. It carries no ephemerides, which must be taken from a nearby reference station, nor Doppler.
+
+At the end of the session the log is downloaded before switching off the base, from the PC connected to \texttt{BaseRTK}, with \texttt{python base\_rtk.py baixa} (the last session) or \texttt{python base\_rtk.py baixa N} (session \texttt{N}; \texttt{python base\_rtk.py llista} shows the existing ones, with size and hours). The command joins the hourly files of the session into a single one, \texttt{base\_sNNNN.rtcm3}, checks its size and, if there are \emph{survey-in} notes, also downloads \texttt{base\_sNNNN\_survey.txt}. \texttt{-o folder} says where they are left, and nothing is deleted from the Pi. The file can be converted to RINEX with \texttt{convbin -r rtcm3} to compute afterwards the session position with a PPP solution or relative to a reference station. This computation has not yet been done with any log.
+
+The Pi disk holds about 3,500~h of log and there is no automatic deletion: sessions that are no longer needed are deleted by hand with \texttt{python base\_rtk.py esborra N} or \texttt{esborra --abans N}. The command asks for confirmation and never deletes the active session. The tools and their installation are in the \texttt{base\_rtk} folder, with its \texttt{README.md}.
+
+\subsection{Verifying the \emph{moving baseline}}
+\begin{enumerate}[label=\alph*)]
+    \item Measure the real vector between the two antennas.
+    \item Check the GNSS \emph{yaw} against the real \emph{heading} (margin $< 1^{\circ}$).
+\end{enumerate}
+
+\subsection{Flight}
+\begin{enumerate}[label=\alph*)]
+    \item Base in \texttt{Fixed} $\rightarrow$ the GS injects RTCM into the drone.
+    \item Arm \textbf{only} with RTK Fixed on both F9Ps and valid \emph{yaw}.
+    \item Fly the planned \emph{grid} in Auto mode.
+    \item Download the FC \emph{logs} (\texttt{.bin}) and the photographs from the SD card.
+\end{enumerate}
+
+\subsection{Post-processing}
+\begin{enumerate}[label=\alph*)]
+    \item Pair each photograph with its \texttt{CAM} (or \texttt{TRIG}) message from the \emph{log} and rewrite the EXIF (\cref{sec:processament-fotos}).
+    \item Generate the geotag file with the per-photo precision.
+    \item Process with ODX/WebODM (\cref{sec:processament}) and generate orthomosaic, DSM and point cloud.
+\end{enumerate}
+
+\section{Ground control points (GCP)}
+\label{sec:gcp}
+
+The precision of the final product can only be stated with independently measured points. Since the base runs a \emph{survey-in} in every session, the \textbf{coordinate frame} of the points is as important as their precision. The planned protocol is:
+\begin{itemize}
+    \item Targets well distributed over the whole area, including the corners and the centre, marked with a high-contrast pattern recognisable in the photograph: at least five control points and, separately, ten check points (\cref{subsec:pla-precisio}).
+    \item Position of each target measured with RTK against \textbf{the same base and the same session} as the flight, with an expected precision of 1--2~cm. This way the points and the \emph{geotags} share the \emph{survey-in} offset and it cancels in the comparison. If they are measured with a total station or another base, a transformation must be fitted before comparing; otherwise the RMSE is dominated by the metre-level base error.
+    \item Separate control points (used in the adjustment) from check points (which do not take part in it), and compute the H/V RMSE of the latter.
+\end{itemize}
+
+\pendent{No target has yet been deployed and no control point measured: this is the planned protocol, not a result. It is the task that unlocks absolute precision.}
+
+\section{Processing (\emph{Structure from Motion} and PPK)}
+\label{sec:processament}
+
+Photogrammetric processing is done with the ODX 3.8.3 engine (WebODM 3.3.0, NodeODX 2.3.1) on a PC with an i5-10400F, 32~GB of RAM and an RTX~2060. A flight of 118 photographs takes about 42~minutes. The options that depart from the defaults are: orthophoto resolution of 1~cm/px, DEM resolution of 2~cm/px, high point-cloud quality, DSM generation, \emph{auto-boundary}, COG, glTF and EPT \emph{point cloud}. The detail of each processing run is in \cref{chap:vols-prova}.
+
+As an alternative or complement to real-time RTK, \textbf{PPK} post-processing with RTKLIB is contemplated, from the raw \texttt{UBX} recordings of the base and the drone, which gives a positioning solution independent of the quality of the RTK link during the flight.
+
+\pendent{PPK has not yet been applied to any flight: the current processing runs use the real-time RTK positions of the controller.}
+
+\section{Quality control and validation criteria}
+\label{sec:validacio}
+
+\subsection{Effect of the \emph{survey-in} on validation}
+\label{subsec:efecte-surveyin}
+
+With the \emph{survey-in} the base computes its position as the mean of autonomous positions, without corrections, and broadcasts it in message 1005. The error of this position is transmitted entirely to the \emph{rover}~\cite{ublox_f9p_im}: the whole session is shifted by the same vector, which is of the order of metres (the acceptance criterion of the protocol is a \texttt{meanAcc} of $\leq 2$~m). In contrast, the \emph{relative} position with respect to the base is barely affected: the baseline-length error is that of the base multiplied by the baseline and divided by the distance to the satellites ($\sim 2\cdot 10^{7}$~m), about 0.02~mm with a base shifted by 2~m and a 200~m baseline.
+
+\begin{itemize}
+    \item \textbf{Not affected} (can be validated without an absolute reference): the accuracy of the RTK baseline, the repeatability of the \emph{rover}, the \emph{heading} and the internal geometry of the product (shape and scale).
+    \item \textbf{Affected:} the absolute position of the map, the comparability between sessions and any comparison with an external reference. Since every session performs a new \emph{survey-in}, two maps of the same place are shifted from each other by the order of metres. The base antenna height (122~cm) enters the elevation with weight 1:1.
+\end{itemize}
+
+There are three ways, not mutually exclusive, to recover the absolute position: reuse a fixed position recorded at the same point; measure a known point with the same base and correct its offset; or compute the session position by PPP from the base log and apply the correction vector to the whole product. The latter is feasible in principle with the RTCM stream already generated, which contains MSM observations (1074, 1084, 1094, 1124) convertible to RINEX with RTKLIB (\texttt{convbin}); this must be verified, as well as that the session lasts enough hours for a centimetre-level PPP.
+
+\subsection{Precision test plan}
+\label{subsec:pla-precisio}
+
+\begin{table}[H]
+    \centering
+    \caption{Precision test plan with \emph{survey-in} and current status}
+    \label{tab:validacio}
+    \footnotesize
+    \begin{tabular}{P{0.8cm}P{4.9cm}P{2.8cm}P{2.6cm}P{2.4cm}}
+        \toprule
+        Test & Procedure & Reference frame & Criterion & Status \\
+        \midrule
+        T1 & Record \texttt{NAV-SVIN} (\texttt{meanX/Y/Z}, \texttt{meanAcc}) in every session and, in samples, compare it with the PPP solution of the same place & --- & Informative: documents the offset & \textbf{Pending}; not recorded in flights 5 and 6 \\
+        T2 & Static \emph{rover} at three distances (e.g.\ 10, 50 and 100~m): RTK base$\rightarrow$\emph{rover} vector against an independent measurement (total station or distance meter and level) & Relative to the base (independent of the \emph{survey-in}) & $< 2$~cm H, $< 3$~cm V & \textbf{Pending} \\
+        T3 & Static repeatability: 10--15~min on a point; standard deviation H/V and percentage of RTK Fixed & Relative & Consistent with 0.01~m + 1~ppm & \textbf{Pending} \\
+        T4 & \emph{Heading}: GNSS \emph{yaw} against a bearing measured with a total station, in several orientations & Independent of the base & $\sigma < 0.5^{\circ}$ & \textbf{Pending}; \emph{yaw} valid in all flights \\
+        T5 & Photogrammetric product: RMSE of the check points, with and without control points, reporting the number of points & Same frame as the \emph{geotags} (same base and session) & $< 3$~cm H, $< 5$~cm V & \textbf{Pending}; internal consistency: reprojection 0.90~px, model--GPS CE90 0.59~m \\
+        T6 & Absolute precision: apply the base PPP vector and check against a known geodetic mark & External frame (EPSG:32631) & To be defined (limited by the PPP) & \textbf{Pending}; requires the base log \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The comparison with a DJI P4 RTK reference \emph{dataset} only makes sense after T6, because it needs an absolutely georeferenced map.
+
+On the number of points: with only five, the uncertainty of the RMSE is large. Edition 2 of the ASPRS standard asks for a minimum of 30 check points to state a product precision, and admits a smaller number in small UAS projects if the report declares it~\cite{asprs2023}. For that reason a minimum of ten check points is recommended, in addition to the control points, always reporting the number.
+
+The internal-consistency indicators (reprojection error, difference between the model and the GPS positions of the photos) measure the coherence of the processing, \textbf{not the precision}: they do not replace T2--T6. Until these are done, no absolute or centimetre-level precision is claimed.
+
+\section{Export of results}
+\label{sec:exportacio}
+
+Each processing run delivers, in the EPSG:32631 coordinate system (UTM 31N), the following products: GeoTIFF orthophoto (1~cm/px at 30~m), GeoTIFF DSM (2~cm/px), dense point cloud (LAZ and EPT), textured models (OBJ and GLB) and a PDF report with the processing statistics.
+
+\section{Drone maintenance}
+\label{sec:manteniment}
+
+\subsection{Before each flight}
+\begin{itemize}
+    \item Visual inspection of the \emph{frame}, the arms and the \emph{standoffs}: cracks or mechanical play.
+    \item Propellers without cracks or deformation, balanced and with the collars well tightened.
+    \item XT60/XT90 and JST-GH connectors without play or signs of heating.
+    \item Helical antennas well fixed, vertical and without damage to the \emph{baseline} \emph{bracket}.
+    \item Battery condition (swelling, voltage per cell) and enough charge for the flight plan.
+    \item Camera SD card with enough free space and correctly formatted.
+\end{itemize}
+
+\subsection{Periodic maintenance}
+\begin{itemize}
+    \item Check the tightening torque of motors and arms every few outings.
+    \item Check the condition of the motor bearings (noise, play on the shaft).
+    \item Update the ArduPilot \emph{firmware} and the F9P receivers only in a controlled way, verifying parameter compatibility before and after.
+    \item Periodic verification of the GNSS \emph{heading} against a known reference, to detect mechanical drift of the \emph{bracket}.
+    \item Cleaning of contacts and connectors, especially after flying in humid or dusty environments.
+    \item LiPo battery maintenance cycles: storage at resting voltage, no discharge below the manufacturer's threshold, and withdrawal of any \emph{pack} that has suffered a \emph{crash}.
+\end{itemize}
+
+\section{Regulations and safety}
+\label{sec:normativa}
+
+This section is informative and does not constitute legal advice. The EASA regulatory framework for self-built drones is in transition; the current status must be verified before each flight campaign~\cite{easa_open_category}.
+
+\subsection{Drone classification}
+
+This UAV is \textbf{self-built} (\emph{privately built}): it does not come from a ready-to-assemble \emph{kit} sold as a single product, but from individual components. According to EASA, a self-built drone \textbf{cannot carry a class C0--C4 mark}, and therefore is limited, within the \emph{Open} category, to subcategory \textbf{A3} (far from people and built-up areas), with a maximum weight of 25~kg~\cite{easa_open_category}.
+
+Derived practical requirements:
+\begin{itemize}
+    \item Registration as a drone operator with the competent aeronautical authority (in Spain, AESA) and visible identification of the registration number on the aircraft.
+    \item A1/A3 pilot certificate (online training and exam) as a minimum; the operator holds it.
+    \item Flight exclusively in subcategory A3: minimum horizontal distance of 150~m from residential, commercial, industrial or recreational areas, and away from people not involved in the operation.
+    \item Check of the airspace and local restrictions (\emph{geo-awareness} zones, NOTAM, proximity to airports) before each flight.
+    \item Third-party liability insurance, recommended (mandatory in many cases depending on weight and use).
+\end{itemize}
+
+Under the transitional rules, self-built drones without a class mark may operate under the inherited regime (by weight) until 1 January 2027. EASA is developing a permanent regime for self-built drones, roughly equivalent to class C4 (subcategory A3, $<25$~kg, pilot with an A1/A3 certificate)~\cite{easa_open_category}.
+
+\subsection{Operational safety}
+
+\begin{itemize}
+    \item Do not fly with RTK Float or without a valid GNSS \emph{fix} if the mission depends on centimetre-level precision (it also reduces the quality of the EKF3 position estimate).
+    \item Always define a \emph{geofence} and \emph{failsafe} actions for low battery and link loss.
+    \item Maintain visual contact (VLOS) unless the corresponding authorisation for BVLOS is held.
+    \item Basic risk assessment of the flight area: obstacles, power lines, third parties and weather (wind, rain).
+\end{itemize}
+
+\section{Lines of continuation}
+\label{sec:treball-futur}
+
+\begin{itemize}
+    \item Absolute validation with control and check points (\cref{sec:gcp}).
+    \item Endurance improvement: change of the propulsion group and Li-ion battery (\cref{sec:autonomia,sec:propulsor}).
+    \item Configuration of the harmonic \emph{notch} filter and Autotune.
+    \item Migration to UM982: a single module with native \emph{heading}, less wiring and less consumption.
+    \item LiDAR integration (Livox Mid-360) for dense vegetation.
+    \item Multispectral camera for precision agriculture.
+    \item Own carrier PCB (F9P + SBC + UPS integrated).
+    \item Publishing corrections to a community NTRIP network (Centipède~\cite{centipede} or rtk2go).
+\end{itemize}
+
+\section{Reference projects}
+\label{sec:referencies}
+
+\begin{itemize}
+    \item \texttt{rtkbase} (Stefal) -- base software~\cite{rtkbase}.
+    \item SparkFun RTK Express -- KiCad design and \emph{firmware}~\cite{sparkfun_rtk_express}.
+    \item \texttt{jacobjhansen/RTCM-Pi} -- PPP workflow~\cite{rtcm_pi}.
+    \item Centipède -- community NTRIP network in Europe~\cite{centipede}.
+    \item ArduPilot -- \emph{moving baseline} and GPS-for-yaw~\cite{ardupilot_moving_baseline}.
+\end{itemize}

@@ -1,0 +1,24 @@
+metrica            run1 (sense corr.)  run2 (retard corr.)
+fotos                             118                  118
+punts                          173084               173401
+obs                            655535               655226
+reproj_px                      0.9029               0.9011
+gsd                             0.451               0.4523
+area                        6633.4505            6713.8756
+focal_mm                      25.7239               25.745
+k1                            -0.1372              -0.1369
+k2                              0.135               0.1355
+k3                             0.1058               0.1051
+gps_std_E                      1.2968               0.3997
+gps_std_N                       0.374               0.1415
+gps_std_U                      0.1229               0.1148
+ce90                            1.803               0.5927
+le90                            0.192               0.1784
+gps_mitja_err                  1.2557               0.3441
+gps_sigma             (3.0, 3.0, 9.0) (0.6271186440677966, 0.6271186440677966, 0.30000000000000016)
+temps_s                     2604.0612            2494.1475
+
+fotos comunes: 118
+Diferencia de posicio de camera run2 - run1 (m):  E mitjana -0.001 std 0.112 | N mitjana -0.021 std 0.137 | U mitjana -0.003 std 0.023
+  modul horitzontal: mediana 0.162 m, max 0.309 m
+Rotacio del model run1->run2: +0.199 graus (3.5 mm/m a 50 m de radi) ; escala relativa 1.00396

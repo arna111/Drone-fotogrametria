@@ -1,0 +1,130 @@
+\documentclass[11pt,a4paper,openany]{book}
+
+% English edition of the report. Same structure and labels as main.tex (Catalan, the source version);
+% the chapters live in parts_en/ and the bibliography in bib/references_en.bib.
+
+% ---------- Language and encoding ----------
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------- General packages ----------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+% Left-aligned paragraph column: avoids gaps between words caused by justification in narrow columns
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.1}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
+\usepackage[backend=biber,style=numeric,sorting=none]{biblatex}
+\addbibresource{bib/references_en.bib}
+\usepackage{cleveref} % must come after hyperref
+\crefname{subsection}{section}{sections}
+\Crefname{subsection}{Section}{Sections}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    citecolor=blue!50!black,
+    urlcolor=blue!50!black,
+    pdftitle={Precision aerial photogrammetry system with its own RTK base},
+    pdfauthor={Arnau Mariegas}
+}
+
+% Visible marker for pending work or missing information
+\newcommand{\pendent}[1]{\par\medskip\noindent\fcolorbox{orange!60!black}{orange!8}{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\small\textbf{Pending.} #1}}\par\medskip}
+
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\thepage}
+\fancyhead[RE]{\leftmark}
+\fancyhead[LO]{\rightmark}
+\renewcommand{\headrulewidth}{0.4pt}
+\captionsetup{font=small, labelfont=bf}
+
+% Uniform list spacing (no stretchable glue) and no vertical stretching of pages
+\raggedbottom
+\setlength{\emergencystretch}{2em}
+\setlist{itemsep=0.4em, parsep=0pt, topsep=0.5em, partopsep=0pt}
+
+% ---------- Document data ----------
+\title{Precision aerial photogrammetry system\\with its own RTK base}
+\author{Arnau Mariegas}
+\date{October 2026}
+
+\begin{document}
+
+\frontmatter
+
+\begin{titlepage}
+    \centering
+    \vspace*{3cm}
+    {\Huge\bfseries Precision aerial photogrammetry\\system with its own RTK base\par}
+    \vspace{1cm}
+    {\Large Design, construction and in-flight validation of a UAV system\\with centimetre-level GNSS positioning\par}
+    \vspace{2.5cm}
+    {\Large Arnau Mariegas\par}
+    \vspace{0.6cm}
+    {\large October 2026\par}
+    \vfill
+    \includegraphics[width=0.75\textwidth]{img/xasis_sencer.jpg}
+\end{titlepage}
+
+\chapter*{Summary}
+\addcontentsline{toc}{chapter}{Summary}
+
+This document describes the design, construction and commissioning of a precision aerial photogrammetry system made of three subsystems: an RTK GNSS base of its own, a UAV with two GNSS receivers in \emph{moving baseline} and a camera with hot-shoe timing, and a ground station that links them. The goal is the centimetre-level geotagging of aerial photographs to produce orthomosaics and digital surface models, with a hardware cost of about €2,150 and full control over the firmware, the corrections and the data flow.
+
+The main results are:
+\begin{itemize}
+    \item An architecture that serves RTCM3 corrections over local WiFi and forwards them to the drone over a long-range telemetry link, and that obtains RTK Fixed for 100~\% of the flight on both receivers, with GNSS-derived yaw and no magnetic compass.
+    \item A flight-test campaign that, from log analysis, resolved control oscillations, a moving-baseline configuration failure, the collapse of a battery and the camera triggering problems (\cref{chap:proves-vol}).
+    \item Two photogrammetry flights processed end to end: 118 photographs reconstructed at 30~m, with a GSD of 0.45~cm/px and a reprojection error of 0.90~px, and 110 at 50~m (\cref{chap:vols-prova}).
+    \item The measurement, by two independent methods, of an effective shutter delay of 0.27--0.28~s ($\sim$1.3~m at 5~m/s), which justifies the hot-shoe feedback and is compensated in the geotagging.
+    \item An analysis of the propulsion group that identifies the propeller diameter as the limiting factor for endurance and quantifies the room for improvement (\cref{sec:propulsor}).
+\end{itemize}
+
+The accuracy of the final product cannot yet be stated: it requires ground control and check points measured with the same base as the flight, planned in the precision test plan (\cref{sec:validacio}). Because the base runs a \emph{survey-in} in every session, the absolute position of the map has an offset of the order of metres that can only be corrected with the base log. The document marks with a \emph{Pending} box the documentation and tests that are still missing, and the consolidated task list is in \cref{sec:pendents-proves-vol}.
+
+\tableofcontents
+
+\mainmatter
+
+% =====================================================
+% PART I — DESIGN AND CONSTRUCTION
+% =====================================================
+\part{Design and construction}
+\input{parts_en/01_construccio/construccio.tex}
+\input{parts_en/01_construccio/manual.tex}
+
+% =====================================================
+% PART II — FLIGHT TESTS
+% =====================================================
+\part{Flight tests and tuning}
+\input{parts_en/02_proves_vol/proves_vol.tex}
+
+% =====================================================
+% PART III — PHOTOGRAMMETRY FLIGHTS
+% =====================================================
+\part{Photogrammetric results}
+\input{parts_en/03_vols/vols_prova.tex}
+
+\backmatter
+\printbibliography[title={References}]
+
+\end{document}

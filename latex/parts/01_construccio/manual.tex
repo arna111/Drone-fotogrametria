@@ -1,0 +1,446 @@
+\chapter{Manual d'operació i procediments}
+\label{chap:manual}
+
+Aquest capítol recull la configuració de referència del sistema i el procediment de treball, aplicables a qualsevol vol de fotogrametria. Els resultats obtinguts amb aquests procediments es presenten al \cref{chap:vols-prova}.
+
+\section{Antenes GNSS}
+\label{sec:antenes-gnss}
+
+\subsection{Antenes helicals del dron}
+
+Les dues antenes helicals del \emph{rover} van muntades:
+\begin{itemize}
+    \item Verticals, paral·leles entre elles, apuntant amunt.
+    \item Al punt més alt del dron.
+    \item Amb una separació mínima de 10~cm respecte al VTx, els ESC i els cables de potència, per evitar interferències.
+    \item Sense inclinació respecte a l'eix vertical.
+\end{itemize}
+
+\subsection{\emph{Baseline} del \emph{moving baseline}}
+
+La separació entre les dues antenes helicals és de \textbf{0,38~m}, sobre un \emph{bracket} rígid de carboni alineat amb l'eix Y (lateral) del dron. Els \emph{offsets} respecte al centre de gravetat són $Y = \mp 0{,}19$~m i $Z = -0{,}10$~m (GPS1 a l'esquerra, GPS2 a la dreta), amb $X = 0$ (\cref{tab:params-gps-mb}).
+
+La precisió de \emph{heading} d'un \emph{moving baseline} escala de manera inversament proporcional a la longitud del \emph{baseline}: amb 0,38~m s'estima una $\sigma$ de l'ordre de $0{,}5^{\circ}$, que cal validar de manera empírica (\cref{sec:validacio}). Qualsevol canvi en la longitud del \emph{bracket} requereix recalibrar el \emph{heading} GNSS.
+
+\subsection{Antena de la base}
+
+Antena de tipus \emph{patch} horitzontal amb pla de massa (\emph{ground plane}), anivellada sobre el trípode topogràfic.
+
+\subsection{Sincronisme de la càmera}
+
+El pin central de la sabata (\emph{hot-shoe}) de la càmera és el senyal \textbf{X-sync}: el Seagull SYNC2 hi encaixa directament, ja que la Sony $\alpha$6000 disposa d'una \emph{Multi Interface Shoe} compatible amb l'estàndard ISO~518.
+
+\section{Configuració de ports sèrie del FC (Kakute H7)}
+\label{sec:ports-serie}
+
+\begin{table}[H]
+    \centering
+    \caption{Assignació de ports sèrie del Kakute H7}
+    \label{tab:ports-serie}
+    \begin{tabular}{lllc}
+        \toprule
+        Port & Funció & Baud rate & Protocol \\
+        \midrule
+        SERIAL0 (USB) & MAVLink2 (configuració) & -- & -- \\
+        SERIAL1 (UART1, port VTX) & RFD868x MAVLink & 57600 & 2 \\
+        SERIAL2 (UART2) & Bluetooth intern (ocupat) & -- & Deshabilitat \\
+        SERIAL3 (UART3) & F9P \#1 -- GPS1 (MB-Base) & 230400 & 5 \\
+        SERIAL4 (UART4) & F9P \#2 -- GPS2 (MB-Rover) & 230400 & 5 \\
+        SERIAL6 (UART6) & RC ELRS (CRSF) & 420000 & 23 \\
+        SERIAL7 (UART7, port ESC) & Telemetria ESC & 115200 & 16 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Configuració de la càmera}
+\label{sec:config-camera}
+
+\subsection{Paràmetres del controlador}
+
+A partir d'ArduPilot 4.5, els paràmetres de càmera tenen el prefix \texttt{CAM1\_*} per donar suport multicàmera; la documentació i els fòrums antics encara fan servir noms \texttt{CAM\_*}.
+
+\begin{table}[H]
+    \centering
+    \caption{Paràmetres de càmera (ArduPilot 4.5 o superior)}
+    \label{tab:params-camera}
+    \begin{tabular}{lP{9.5cm}}
+        \toprule
+        Paràmetre & Valor / Funció \\
+        \midrule
+        \texttt{SERVO5\_FUNCTION} & 10 (\emph{CameraTrigger}, MAP2 al pad M5) \\
+        \texttt{CAM1\_TYPE} & 1 (Servo) \\
+        \texttt{CAM1\_DURATION} & 1.0 (en \textbf{segons}, no ms): el MAP2 en mode IS-T necessita ordres d'1~s \\
+        \texttt{CAM1\_SERVO\_ON} & 1700 (mode IS-T) \\
+        \texttt{CAM1\_SERVO\_OFF} & 1500 (dins el rang de repòs del MAP2, 1400--1600) \\
+        \texttt{SERVO5\_TRIM} & 1500 \\
+        \texttt{CAM1\_TRIGG\_DIST} & 0 a la configuració base; es fixa a cada missió (\cref{sec:planificacio-vol}) \\
+        \texttt{SERVO6\_FUNCTION} & $-1$ (GPIO per al \emph{feedback} del SYNC2, pad M6) \\
+        \texttt{CAM1\_FEEDBAK\_PIN} & 55 \\
+        \texttt{CAM1\_FEEDBAK\_POL} & 1 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+El nom del paràmetre és \texttt{CAM1\_FEEDBAK\_PIN}, escrit \textbf{sense la ``C''} de \emph{feedback} (nomenclatura històrica d'ArduPilot). El pin 55 correspon al pad de \texttt{SERVO6} reassignat com a GPIO.
+
+Amb un objectiu manual sense contactes electrònics, el MAP2 no ha de treballar en mode AF-T (pre-enfocament d'1~s inútil, que afegeix retard constant). El detall del diagnòstic és a \cref{subsec:problemes-camera}.
+
+\subsection{Ajust de la càmera}
+\label{subsec:ajust-camera}
+
+\begin{table}[H]
+    \centering
+    \caption{Ajust de la Sony $\alpha$6000 per a fotogrametria}
+    \label{tab:ajust-camera}
+    \begin{tabular}{ll}
+        \toprule
+        Ajust & Valor \\
+        \midrule
+        Mode d'exposició & M (manual) \\
+        Temps d'obturació & 1/1600~s \\
+        Diafragma & f/5,6 (anell fixat amb cinta) \\
+        Enfocament & Manual a infinit (els dos anells fixats amb cinta) \\
+        ISO & Automàtic, amb sostre a 1600 \\
+        Mode de dispar & \emph{Single shot}, JPEG Fine \\
+        Obturador & Electrònic de primera cortina activat \\
+        \emph{Release w/o Lens} & Activat (necessari amb objectiu sense contactes) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+L'òptica manual no transmet dades a la càmera: l'EXIF grava \texttt{FocalLength=0} i \texttt{LensModel} buit, i l'orientació dependria del rumb (\cref{sec:processament-fotos}). Aquestes metadades es reescriuen en el post-procés.
+
+La càmera no té marge dinàmic per compensar la poca llum: les fotografies s'han de fer amb el sol a més de 10--15$^{\circ}$ sobre l'horitzó (\cref{sec:vol6}).
+
+\subsection{Retard de l'obturador}
+
+L'ordre de dispar del controlador (\texttt{TRIG}) i l'exposició real estan separats per $\approx 0{,}28$~s (\cref{sec:retard-obturador}); a 5~m/s són $\approx 1{,}4$~m. Per això el geoetiquetat fa servir la posició del missatge \texttt{CAM} (instant del \emph{feedback} de la sabata) quan està disponible, i es compensa amb $v\cdot\tau$ quan no ho està.
+
+\section{Configuració GPS \emph{moving baseline} i \emph{yaw}}
+\label{subsec:gps-moving-baseline}
+
+\begin{table}[H]
+    \centering
+    \caption{Paràmetres de \emph{moving baseline} i GPS-for-yaw}
+    \label{tab:params-gps-mb}
+    \begin{tabular}{ll}
+        \toprule
+        Paràmetre & Valor \\
+        \midrule
+        \texttt{GPS1\_TYPE} & 17 (MB-Base) \\
+        \texttt{GPS2\_TYPE} & 18 (MB-Rover) \\
+        \texttt{GPS\_AUTO\_CONFIG} & 1 \\
+        \texttt{GPS\_DRV\_OPTIONS} & 0 \\
+        \texttt{GPS\_INJECT\_TO} & 127 \\
+        \texttt{EK3\_SRC1\_POSXY} / \texttt{VELXY} & 3 (GPS) \\
+        \texttt{EK3\_SRC1\_YAW} & 2 (GPS yaw) \\
+        \texttt{COMPASS\_ENABLE} & 0 (sense brúixola) \\
+        \texttt{GPS1\_POS\_X/Y/Z} & $0$ / $-0{,}19$ / $-0{,}10$~m \\
+        \texttt{GPS2\_POS\_X/Y/Z} & $0$ / $+0{,}19$ / $-0{,}10$~m \\
+        \texttt{GPS1\_MB\_OFS\_Y} & $-0{,}38$~m \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\texttt{GPS\_DRV\_OPTIONS} ha de ser 0: el valor 1 (ús de l'UART2 per al \emph{moving baseline}) assumeix un cable directe entre els UART2 dels dos F9P per transportar el flux RTCM, que en aquest muntatge no existeix; amb el bit activat el \emph{rover} no arriba mai a RTK Fixed (\texttt{PreArm: GPS[2] yaw not available}). El flux entre receptors passa pel controlador de vol.
+
+\section{Control, bateria i seguretat}
+\label{sec:params-control}
+
+\begin{table}[H]
+    \centering
+    \caption{Paràmetres de control, bateria i seguretat de la configuració de referència}
+    \label{tab:params-control}
+    \small
+    \begin{tabular}{ll}
+        \toprule
+        Paràmetre & Valor \\
+        \midrule
+        \texttt{FRAME\_CLASS} & 1 (Quad) \\
+        \texttt{FRAME\_TYPE} & 1 (X) \\
+        \texttt{MOT\_PWM\_TYPE} & 5 (DShot300)~\cite{ardupilot_dshot} \\
+        \texttt{ATC\_RAT\_RLL\_P} / \texttt{ATC\_RAT\_PIT\_P} & 0,07 \\
+        \texttt{ATC\_RAT\_RLL\_I} / \texttt{ATC\_RAT\_PIT\_I} & 0,07 \\
+        \texttt{ATC\_RAT\_RLL\_D} / \texttt{ATC\_RAT\_PIT\_D} & 0,002 \\
+        \texttt{ATC\_RAT\_YAW\_P} & 0,10 \\
+        \texttt{ATC\_RAT\_YAW\_I} & 0,01 \\
+        \texttt{MOT\_THST\_EXPO} & 0,65 \\
+        \texttt{MOT\_SPIN\_ARM} & 0,04 \\
+        \texttt{MOT\_SPIN\_MIN} & 0,06 \\
+        \texttt{MOT\_THST\_HOVER} & 0,225 (après en vol, \texttt{MOT\_HOVER\_LEARN=2}) \\
+        \texttt{BATT\_MONITOR} & 4 (tensió i corrent analògics) \\
+        \texttt{BATT\_VOLT\_MULT} & 10,82 (calibrat) \\
+        \texttt{BATT\_AMP\_PERVLT} & 87,73 (calibrat) \\
+        \texttt{BATT\_LOW\_VOLT} / \texttt{BATT\_FS\_LOW\_ACT} & 21,6~V / 2 (RTL) \\
+        \texttt{BATT\_CRT\_VOLT} / \texttt{BATT\_FS\_CRT\_ACT} & 20,4~V / 1 (Land) \\
+        \texttt{BATT\_FS\_VOLTSRC} & 0 (tensió instantània) \\
+        \texttt{FENCE\_ENABLE} / \texttt{FENCE\_TYPE} & 1 / 7 (altura, cercle i polígon) \\
+        \texttt{FENCE\_RADIUS} & 700~m \\
+        \texttt{FENCE\_ALT\_MAX} & 120~m \\
+        \texttt{WPNAV\_SPEED} & 500~cm/s (5~m/s) en missions automàtiques \\
+        \texttt{FLTMODE1} a \texttt{FLTMODE6} & Stabilize, AltHold, Loiter, Auto, Guided, RTL \\
+        \texttt{LOG\_BITMASK} & 196607 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Checklist pre-vol}
+\label{sec:checklist-prevol}
+
+\begin{enumerate}[label=\arabic*.]
+    \item Verificar que els dos F9P (base i dron) reporten \texttt{RTK Fixed} abans d'armar, amb tipus de \emph{fix} correcte a tots dos receptors (no \texttt{RTK Float} ni \texttt{3D Fix}).
+    \item Verificar que el \emph{yaw} GNSS (\emph{moving baseline}) és vàlid i coherent amb el \emph{heading} real (marge $< 1^{\circ}$).
+    \item Comprovar l'enllaç RFD868x GS$\leftrightarrow$dron i la recepció de correccions RTCM al dron.
+    \item Comprovar el nivell de bateria del dron (tensió per cel·la) i de la base (UPS).
+    \item Comprovar la targeta SD i la bateria de la càmera, i que l'ajust és el de \cref{tab:ajust-camera}.
+    \item Provar el disparador amb \emph{Trigger Camera Now} i confirmar que apareixen els missatges \texttt{CAM} (\emph{feedback} SYNC2 actiu).
+    \item Revisar els modes de vol assignats i que el \emph{geofence} és actiu (\cref{tab:params-control}).
+    \item Comprovar a Mission Planner que l'EKF3 és sa (sense advertiments de variància de posició o velocitat), que el HDOP és baix (recomanat $< 1$ amb RTK Fixed) i que no hi ha cap missatge de \emph{prearm} pendent.
+    \item Verificar que \texttt{COMPASS\_ENABLE=0} i que no hi ha cap \emph{prearm error} de brúixola.
+    \item Comprovar els \emph{failsafes}: pèrdua de RC, pèrdua de telemetria, bateria baixa i crítica.
+    \item Comprovar que el sol és a més de 10--15$^{\circ}$ sobre l'horitzó i que l'àrea de vol i l'espai aeri ho permeten (\cref{sec:normativa}).
+\end{enumerate}
+
+\section{Planificació de vol}
+\label{sec:planificacio-vol}
+
+\subsection{Càlcul del GSD}
+
+El \emph{Ground Sample Distance} depèn només de l'alçada de vol $H$, la mida del sensor, la distància focal $f$ i la resolució de la imatge:
+\[
+\mathrm{GSD}\,\text{(cm/px)} = \frac{H\,\text{(m)} \times \text{amplada del sensor (mm)} \times 100}{f\,\text{(mm)} \times \text{amplada de la imatge (px)}}
+\]
+
+Amb la Sony $\alpha$6000 (sensor APS-C de 23,5~$\times$~15,6~mm, 6000~$\times$~4000~px, mida de píxel $\approx 3{,}92$~\textmu m) i l'òptica TTArtisan de 25~mm:
+\[
+\mathrm{GSD}\,\text{(cm/px)} \approx 0{,}0157 \times H\,\text{(m)}
+\]
+
+\begin{table}[H]
+    \centering
+    \caption{GSD i cobertura per imatge segons l'alçada (Sony $\alpha$6000 + TTArtisan 25~mm)}
+    \label{tab:gsd-altura}
+    \begin{tabular}{ccc}
+        \toprule
+        Alçada (m) & GSD (cm/px) & Empremta (m, ample $\times$ alt) \\
+        \midrule
+        30 & 0,47 & 28,2 $\times$ 18,7 \\
+        50 & 0,78 & 47,0 $\times$ 31,2 \\
+        60 & 0,94 & 56,4 $\times$ 37,4 \\
+        80 & 1,25 & 75,2 $\times$ 49,9 \\
+        100 & 1,57 & 94,0 $\times$ 62,4 \\
+        120 & 1,88 & 112,8 $\times$ 74,9 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Els valors mesurats als vols de prova concorden amb aquesta relació: tenint en compte la focal calibrada pel processat (25,72~mm), un GSD de 0,451~cm/px correspon a 29,6~m d'alçada (vol previst a 30~m), i un GSD de 0,743~cm/px a 48,9~m (vol previst a $\sim$50~m).
+
+\subsection{Paràmetres de vol}
+
+\begin{table}[H]
+    \centering
+    \caption{Paràmetres de vol adoptats i recomanats}
+    \label{tab:parametres-vol}
+    \begin{tabular}{lP{9cm}}
+        \toprule
+        Paràmetre & Valor \\
+        \midrule
+        Alçada de vol & Segons el GSD objectiu (\cref{tab:gsd-altura}); 30~m i 50~m als vols de prova \\
+        Solapament frontal / lateral & 75--77~\% / 65--69~\% al vol 5; 80~\% / 70~\% recomanat amb relleu complex \\
+        Velocitat & 5~m/s (\texttt{WPNAV\_SPEED=500}); limitada pel \emph{motion blur}: $v_{\max} = \mathrm{GSD}/t_{\text{exposició}}$ \\
+        Dispar & Per distància (\texttt{CAM1\_TRIGG\_DIST}), amb l'interval entre fotos superior a l'1~s de \texttt{CAM1\_DURATION} \\
+        Orientació de la càmera & Costat llarg del sensor al llarg del sentit de vol \\
+        Il·luminació & Sol a més de 10--15$^{\circ}$ sobre l'horitzó \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Els percentatges de solapament de 80/70~\% són el valor per defecte habitual en programari de fotogrametria per a projectes de precisió amb bona textura del terreny; es poden reduir amb precaució gràcies al geoetiquetat RTK, però un solapament insuficient continua limitant la qualitat del \emph{matching} SfM. Com que \texttt{CAM1\_DURATION=1.0} fixa un interval mínim d'aproximadament 1~s entre dispars, a 5~m/s la distància entre fotos ha de ser d'almenys 5~m (\cref{subsec:autonomia-altura}).
+
+\section{Protocol de camp}
+\label{sec:protocol-camp}
+
+\subsection{Posicionar la base}
+\begin{enumerate}[label=\alph*)]
+    \item Trípode sobre un punt estable amb el cel net a 360$^{\circ}$, lluny de parets, cobertes metàl·liques i vehicles; mesurar l'alçada de l'antena (122~cm als vols de prova).
+    \item Engegar la Pi i esperar uns 30~s que aparegui la xarxa \texttt{BaseRTK}; connectar-hi la GS.
+    \item Reiniciar el \emph{survey-in} per esborrar la mitjana de la sessió anterior i esperar que sigui vàlid, des del PC connectat a \texttt{BaseRTK} i dins la carpeta \texttt{base\_rtk}: \texttt{python base\_rtk.py survey}. L'ordre va mostrant la durada, les observacions i l'error mitjà, i acaba quan el \emph{survey-in} és vàlid (mínim 300~s i error mitjà, \texttt{meanAcc}, de 2~m o millor) o als 20~min (\texttt{--minuts N} canvia el límit). Mentre dura, el servei \texttt{rtkbase} està aturat i el port 5000 no serveix; es reengega sol al final, també si es talla la connexió SSH o es prem Ctrl-C.
+    \item Si no arriba a ser vàlid, la mitjana es queda estancada per \emph{multipath} o per obstrucció del cel: cal millorar la ubicació de l'antena, no allargar l'espera. El receptor continua amb el \emph{survey-in} en marxa, i \texttt{python base\_rtk.py survey --estat} el consulta sense reiniciar-lo.
+    \item Quan el \emph{survey-in} és vàlid, l'ordre desa automàticament la posició ECEF (\texttt{meanX/Y/Z}) i la \texttt{meanAcc} finals a \texttt{survey.txt}, dins la sessió activa de la Pi. És l'únic registre de la posició de la base d'aquella sessió, i es baixa amb el registre (vegeu «Registre de la sessió» més avall).
+\end{enumerate}
+
+Mentre el \emph{survey-in} no és vàlid, el flux no porta el missatge 1005 (posició de la base) i el dron no pot arribar a RTK Fixed. La posició de la base és, doncs, la del \emph{survey-in}, amb un error de l'ordre de metres que desplaça tota la sessió (\cref{subsec:efecte-surveyin}). Per afirmar posicions absolutes caldrà reutilitzar una posició fixa registrada al mateix punt, o bé corregir el desplaçament de cada sessió amb una solució PPP del seu registre d'observacions.
+
+\paragraph{Registre de la sessió.} El servei \texttt{rtkbase} desa el flux del receptor a fitxers mentre el reenvia pel port 5000, durant tota la sessió: \texttt{str2str} té dues sortides, \texttt{tcpsvr://:5000} i \texttt{file:///home/arnau/logs/actual/base\_\%Y\%m\%d\_\%h\%M.rtcm3::S=1}. Cada arrencada del servei obre una \emph{sessió} nova, una carpeta \texttt{/home/arnau/logs/sNNNN/} (\texttt{actual} apunta a la que està en curs), i dins s'hi crea un fitxer cada hora (\texttt{::S=1}). El nom dels fitxers porta l'hora UTC de la Pi, i la data és poc fiable, perquè la Pi no té rellotge de temps real ni internet: l'hora vàlida és la GNSS de dins de les dades. Un reinici del servei o un tall d'alimentació obre una sessió nova, tret del que fa \texttt{survey}, que continua a la mateixa. El registre és el mateix flux del port, uns 7~MB per hora, amb les observacions RTCM3 (pseudodistància, fase i C/N0 dels quatre sistemes), el missatge 1005 un cop el \emph{survey-in} és vàlid i els missatges UBX de navegació que el receptor emet pel mateix port. No porta efemèrides, que cal agafar d'una estació de referència propera, ni Doppler.
+
+Al final de la sessió es baixa el registre abans d'apagar la base, des del PC connectat a \texttt{BaseRTK}, amb \texttt{python base\_rtk.py baixa} (la darrera sessió) o \texttt{python base\_rtk.py baixa N} (la sessió \texttt{N}; \texttt{python base\_rtk.py llista} mostra les que hi ha, amb mida i hores). L'ordre uneix els fitxers horaris de la sessió en un de sol, \texttt{base\_sNNNN.rtcm3}, en comprova la mida i, si hi ha notes del \emph{survey-in}, baixa també \texttt{base\_sNNNN\_survey.txt}. \texttt{-o carpeta} indica on es deixen, i no s'esborra res de la Pi. Es pot convertir el fitxer a RINEX amb \texttt{convbin -r rtcm3} per calcular a posteriori la posició de la sessió amb una solució PPP o relativa a una estació de referència. Aquest càlcul encara no s'ha fet amb cap registre.
+
+Al disc de la Pi hi caben unes 3\,500~h de registre i no hi ha esborrat automàtic: les sessions que ja no calen s'esborren a mà amb \texttt{python base\_rtk.py esborra N} o \texttt{esborra --abans N}. L'ordre demana confirmació i no esborra mai la sessió activa. Les eines i la seva instal·lació són a la carpeta \texttt{base\_rtk}, amb el seu \texttt{README.md}.
+
+\subsection{Verificar el \emph{moving baseline}}
+\begin{enumerate}[label=\alph*)]
+    \item Mesurar el vector real entre les dues antenes.
+    \item Comprovar el \emph{yaw} GNSS contra el \emph{heading} real (marge $< 1^{\circ}$).
+\end{enumerate}
+
+\subsection{Vol}
+\begin{enumerate}[label=\alph*)]
+    \item Base en \texttt{Fixed} $\rightarrow$ la GS injecta RTCM al dron.
+    \item Armar \textbf{només} amb RTK Fixed als dos F9P i \emph{yaw} vàlid.
+    \item Volar el \emph{grid} planificat en mode Auto.
+    \item Descarregar els \emph{logs} del FC (\texttt{.bin}) i les fotografies de la SD.
+\end{enumerate}
+
+\subsection{Post-procés}
+\begin{enumerate}[label=\alph*)]
+    \item Aparellar cada fotografia amb el seu missatge \texttt{CAM} (o \texttt{TRIG}) del \emph{log} i reescriure l'EXIF (\cref{sec:processament-fotos}).
+    \item Generar el fitxer de geoetiquetes amb la precisió per foto.
+    \item Processar amb ODX/WebODM (\cref{sec:processament}) i generar ortomosaic, DSM i núvol de punts.
+\end{enumerate}
+
+\section{Punts de control terrestre (GCP)}
+\label{sec:gcp}
+
+La precisió del producte final només es pot afirmar amb punts mesurats de manera independent. Com que la base fa un \emph{survey-in} a cada sessió, el \textbf{marc de coordenades} dels punts és tan important com la seva precisió. El protocol previst és:
+\begin{itemize}
+    \item Dianes ben distribuïdes per tota l'àrea, incloent-hi les cantonades i el centre, marcades amb un patró d'alt contrast reconeixible a la fotografia: com a mínim cinc de control i, a part, deu de comprovació (\cref{subsec:pla-precisio}).
+    \item Posició de cada diana mesurada amb RTK contra \textbf{la mateixa base i la mateixa sessió} que el vol, amb una precisió prevista d'1--2~cm. Així els punts i els \emph{geotags} comparteixen el desplaçament del \emph{survey-in} i aquest s'anul·la a la comparació. Si es mesuren amb estació total o amb una altra base, cal ajustar-hi una transformació abans de comparar; si no, l'RMSE el domina l'error de metres de la base.
+    \item Separar punts de control (que s'usen a l'ajust) de punts de comprovació (que no hi intervenen), i calcular l'RMSE H/V d'aquests últims.
+\end{itemize}
+
+\pendent{Encara no s'ha desplegat cap diana ni mesurat cap punt de control: aquest és el protocol previst, no un resultat. És la tasca que desbloqueja la precisió absoluta.}
+
+\section{Processament (\emph{Structure from Motion} i PPK)}
+\label{sec:processament}
+
+El processament fotogramètric es fa amb el motor ODX 3.8.3 (WebODM 3.3.0, NodeODX 2.3.1) en un PC amb un i5-10400F, 32~GB de RAM i una RTX~2060. Un vol de 118 fotografies triga uns 42~minuts. Les opcions que s'aparten dels valors per defecte són: resolució d'ortofoto de 1~cm/px, resolució de DEM de 2~cm/px, qualitat del núvol de punts alta, generació de DSM, \emph{auto-boundary}, COG, glTF i \emph{point cloud} EPT. El detall de cada processat és a \cref{chap:vols-prova}.
+
+Com a alternativa o complement al RTK en temps real, es contempla el post-procés \textbf{PPK} amb RTKLIB a partir dels enregistraments \texttt{UBX} en brut de la base i del dron, que dona una solució de posicionament independent de la qualitat de l'enllaç RTK durant el vol.
+
+\pendent{El PPK no s'ha aplicat encara a cap vol: els processats actuals fan servir les posicions RTK en temps real del controlador.}
+
+\section{Control de qualitat i criteris de validació}
+\label{sec:validacio}
+
+\subsection{Efecte del \emph{survey-in} sobre la validació}
+\label{subsec:efecte-surveyin}
+
+Amb el \emph{survey-in} la base calcula la seva posició com a mitjana de posicions autònomes, sense correccions, i la difon al missatge 1005. L'error d'aquesta posició es transmet íntegrament al \emph{rover}~\cite{ublox_f9p_im}: tota la sessió queda desplaçada pel mateix vector, que és de l'ordre de metres (el criteri d'acceptació del protocol és una \texttt{meanAcc} d'$\leq 2$~m). En canvi, la posició \emph{relativa} respecte a la base gairebé no es veu afectada: l'error de longitud de la línia de base és el de la base multiplicat per la línia de base i dividit per la distància als satèl·lits ($\sim 2\cdot 10^{7}$~m), uns 0,02~mm amb una base desplaçada 2~m i una línia de base de 200~m.
+
+\begin{itemize}
+    \item \textbf{No afectat} (es pot validar sense referència absoluta): l'exactitud de la línia de base RTK, la repetibilitat del \emph{rover}, el \emph{heading} i la geometria interna del producte (forma i escala).
+    \item \textbf{Afectat:} la posició absoluta del mapa, la comparabilitat entre sessions i qualsevol comparació amb una referència externa. Com que cada sessió fa un \emph{survey-in} nou, dos mapes del mateix lloc queden desplaçats entre ells de l'ordre de metres. L'alçada de l'antena de la base (122~cm) entra a la cota amb pes 1:1.
+\end{itemize}
+
+Per recuperar la posició absoluta hi ha tres vies, no excloents: reutilitzar una posició fixa registrada al mateix punt; mesurar un punt conegut amb la mateixa base i corregir-ne el desplaçament; o calcular la posició de la sessió per PPP a partir del registre de la base i aplicar-ne el vector de correcció a tot el producte. Aquesta última és viable en principi amb el flux RTCM ja generat, que conté observacions MSM (1074, 1084, 1094, 1124) convertibles a RINEX amb RTKLIB (\texttt{convbin}); cal verificar-ho i que la sessió duri prou hores per a un PPP de nivell centimètric.
+
+\subsection{Pla de proves de precisió}
+\label{subsec:pla-precisio}
+
+\begin{table}[H]
+    \centering
+    \caption{Pla de proves de precisió amb \emph{survey-in} i estat actual}
+    \label{tab:validacio}
+    \footnotesize
+    \begin{tabular}{P{0.8cm}P{4.9cm}P{2.8cm}P{2.6cm}P{2.4cm}}
+        \toprule
+        Prova & Procediment & Marc de referència & Criteri & Estat \\
+        \midrule
+        T1 & Registrar \texttt{NAV-SVIN} (\texttt{meanX/Y/Z}, \texttt{meanAcc}) a cada sessió i, a mostres, comparar-lo amb la solució PPP del mateix lloc & --- & Informatiu: documenta el desplaçament & \textbf{Pendent}; no registrat als vols 5 i 6 \\
+        T2 & \emph{Rover} estàtic a tres distàncies (p.~ex.\ 10, 50 i 100~m): vector base$\rightarrow$\emph{rover} RTK contra una mesura independent (estació total o distanciòmetre i nivell) & Relatiu a la base (independent del \emph{survey-in}) & $< 2$~cm H, $< 3$~cm V & \textbf{Pendent} \\
+        T3 & Repetibilitat estàtica: 10--15~min sobre un punt; desviació estàndard H/V i percentatge de RTK Fixed & Relatiu & Coherent amb 0,01~m + 1~ppm & \textbf{Pendent} \\
+        T4 & \emph{Heading}: \emph{yaw} GNSS contra un rumb de referència mesurat amb estació total, en diverses orientacions & Independent de la base & $\sigma < 0{,}5^{\circ}$ & \textbf{Pendent}; \emph{yaw} vàlid en tots els vols \\
+        T5 & Producte fotogramètric: RMSE dels punts de comprovació, amb i sense punts de control, informant del nombre de punts & Mateix marc que els \emph{geotags} (mateixa base i sessió) & $< 3$~cm H, $< 5$~cm V & \textbf{Pendent}; consistència interna: reprojecció 0,90~px, model--GPS CE90 0,59~m \\
+        T6 & Precisió absoluta: aplicar el vector PPP de la base i comprovar sobre una marca geodèsica coneguda & Marc extern (EPSG:32631) & Per definir (limitat pel PPP) & \textbf{Pendent}; requereix el registre de la base \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+La comparativa amb un \emph{dataset} de referència DJI P4 RTK només té sentit després de T6, perquè necessita un mapa georeferenciat en absolut.
+
+Sobre el nombre de punts: amb només cinc la incertesa de l'RMSE és gran. L'edició 2 de l'estàndard ASPRS demana un mínim de 30 punts de comprovació per afirmar una precisió de producte, i admet un nombre menor en projectes petits amb UAS si l'informe ho declara~\cite{asprs2023}. Per això es recomana un mínim de deu de comprovació, a més dels de control, i indicar-ne sempre el nombre.
+
+Els indicadors de consistència interna (error de reprojecció, diferència entre el model i les posicions GPS de les fotos) mesuren la coherència del processat, \textbf{no la precisió}: no substitueixen T2--T6. Fins que no es facin, no s'afirma cap precisió absoluta ni centimètrica.
+
+\section{Exportació de resultats}
+\label{sec:exportacio}
+
+Cada processat lliura, en el sistema de coordenades EPSG:32631 (UTM 31N), els productes següents: ortofoto GeoTIFF (1~cm/px a 30~m), DSM GeoTIFF (2~cm/px), núvol de punts dens (LAZ i EPT), models texturats (OBJ i GLB) i un informe PDF amb les estadístiques del processat.
+
+\section{Manteniment del dron}
+\label{sec:manteniment}
+
+\subsection{Abans de cada vol}
+\begin{itemize}
+    \item Inspecció visual del \emph{frame}, els braços i els \emph{standoffs}: fissures o joc mecànic.
+    \item Hèlixs sense esquerdes ni deformacions, equilibrades i amb els collarins ben apretats.
+    \item Connectors XT60/XT90 i JST-GH sense joc ni signes d'escalfament.
+    \item Antenes helicals ben fixades, verticals i sense danys al \emph{bracket} de \emph{baseline}.
+    \item Estat de la bateria (inflor, tensió per cel·la) i càrrega suficient per al pla de vol.
+    \item Targeta SD de la càmera amb espai lliure suficient i formatada correctament.
+\end{itemize}
+
+\subsection{Manteniment periòdic}
+\begin{itemize}
+    \item Revisió dels parells de collament de motors i braços cada poques sortides.
+    \item Comprovació de l'estat dels coixinets dels motors (soroll, joc a l'eix).
+    \item Actualització del \emph{firmware} d'ArduPilot i dels receptors F9P només de manera controlada, verificant la compatibilitat de paràmetres abans i després.
+    \item Verificació periòdica del \emph{heading} GNSS contra una referència coneguda, per detectar deriva mecànica del \emph{bracket}.
+    \item Neteja de contactes i connectors, especialment després de volar en ambients humits o amb pols.
+    \item Cicles de manteniment de les bateries LiPo: emmagatzematge a tensió de repòs, sense descarregar per sota del llindar del fabricant, i retirada de qualsevol \emph{pack} que hagi patit un \emph{crash}.
+\end{itemize}
+
+\section{Normativa i seguretat}
+\label{sec:normativa}
+
+Aquesta secció és informativa i no constitueix assessorament legal. El marc normatiu EASA per a drones autoconstruïts està en transició; cal verificar-ne l'estat vigent abans de cada campanya de vol~\cite{easa_open_category}.
+
+\subsection{Classificació del dron}
+
+Aquest UAV és \textbf{autoconstruït} (\emph{privately built}): no prové d'un \emph{kit} llest per muntar comercialitzat com a producte únic, sinó de components individuals. Segons EASA, un dron autoconstruït \textbf{no pot portar marcat de classe C0--C4}, i per tant queda limitat, dins la categoria \emph{Open}, a la subcategoria \textbf{A3} (lluny de persones i de zones edificades), amb pes màxim de 25~kg~\cite{easa_open_category}.
+
+Requisits pràctics derivats:
+\begin{itemize}
+    \item Registre com a operador de drones a l'autoritat aeronàutica competent (a l'Estat espanyol, AESA) i identificació visible del número de registre a l'aeronau.
+    \item Certificat de pilot A1/A3 (formació en línia i examen) com a mínim; l'operador el té.
+    \item Vol exclusivament en subcategoria A3: distància horitzontal mínima de 150~m respecte a zones residencials, comercials, industrials o recreatives, i lluny de persones alienes a l'operació.
+    \item Comprovació de l'espai aeri i de les restriccions locals (zones \emph{geo-awareness}, NOTAM, proximitat a aeroports) abans de cada vol.
+    \item Assegurança de responsabilitat civil, recomanable (obligatòria en molts casos segons el pes i l'ús).
+\end{itemize}
+
+Sota les regles transitòries, els drones autoconstruïts sense marcat de classe poden operar segons el règim heretat (per pes) fins a l'1 de gener de 2027. EASA desenvolupa un règim permanent per a drones autoconstruïts, equivalent aproximadament a la classe C4 (subcategoria A3, $<25$~kg, pilot amb certificat A1/A3)~\cite{easa_open_category}.
+
+\subsection{Seguretat operacional}
+
+\begin{itemize}
+    \item No volar amb RTK Float ni sense \emph{fix} GNSS vàlid si la missió depèn de precisió centimètrica (a més, redueix la qualitat de l'estimació de posició de l'EKF3).
+    \item Definir sempre un \emph{geofence} i accions de \emph{failsafe} per a bateria baixa i pèrdua d'enllaç.
+    \item Mantenir contacte visual (VLOS) llevat que es disposi de l'autorització corresponent per a BVLOS.
+    \item Avaluació de riscos bàsica de la zona de vol: obstacles, línies elèctriques, tercers i meteorologia (vent, pluja).
+\end{itemize}
+
+\section{Línies de continuïtat}
+\label{sec:treball-futur}
+
+\begin{itemize}
+    \item Validació absoluta amb punts de control i de comprovació (\cref{sec:gcp}).
+    \item Millora de l'autonomia: canvi del grup propulsor i bateria Li-ion (\cref{sec:autonomia,sec:propulsor}).
+    \item Configuració del filtre \emph{notch} harmònic i Autotune.
+    \item Migració a UM982: un sol mòdul amb \emph{heading} natiu, menys cablejat i menys consum.
+    \item Integració de LiDAR (Livox Mid-360) per a vegetació densa.
+    \item Càmera multiespectral per a agricultura de precisió.
+    \item PCB \emph{carrier} pròpia (F9P + SBC + UPS integrats).
+    \item Publicar correccions a una xarxa NTRIP comunitària (Centipède~\cite{centipede} o rtk2go).
+\end{itemize}
+
+\section{Projectes de referència}
+\label{sec:referencies}
+
+\begin{itemize}
+    \item \texttt{rtkbase} (Stefal) -- programari de base~\cite{rtkbase}.
+    \item SparkFun RTK Express -- disseny KiCad i \emph{firmware}~\cite{sparkfun_rtk_express}.
+    \item \texttt{jacobjhansen/RTCM-Pi} -- flux de treball PPP~\cite{rtcm_pi}.
+    \item Centipède -- xarxa NTRIP comunitària a Europa~\cite{centipede}.
+    \item ArduPilot -- \emph{moving baseline} i GPS-for-yaw~\cite{ardupilot_moving_baseline}.
+\end{itemize}
